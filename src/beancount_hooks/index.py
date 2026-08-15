@@ -44,8 +44,8 @@ class LedgerIndex:
             if not accounts:
                 continue
 
-            payee = txn.payee or ""
-            narration = txn.narration or ""
+            payee = txn.payee or ''
+            narration = txn.narration or ''
             tags = txn.tags or frozenset()
 
             # --- Payee indexes ---
@@ -89,16 +89,14 @@ class LedgerIndex:
         self.keyword_map = {
             kw: counter
             for kw, counter in self.keyword_map.items()
-            if counter.total() >= 3 and not re.match(r"^\d+$", kw)
+            if counter.total() >= 3 and not re.match(r'^\d+$', kw)
         }
 
     # ------------------------------------------------------------------
     # Public query helpers
     # ------------------------------------------------------------------
 
-    def _top_accounts(
-        self, counter: Counter[frozenset[str]], min_count: int
-    ) -> list[str] | None:
+    def _top_accounts(self, counter: Counter[frozenset[str]], min_count: int) -> list[str] | None:
         """Return the most common account set from a counter, or None.
 
         Only returns the accounts if the top entry's count is >= *min_count*.
@@ -110,18 +108,14 @@ class LedgerIndex:
             return None
         return sorted(top_accounts)
 
-    def get_accounts_by_payee(
-        self, payee: str, min_count: int = 3
-    ) -> list[str] | None:
+    def get_accounts_by_payee(self, payee: str, min_count: int = 3) -> list[str] | None:
         """Exact payee → most common account set (≥ *min_count* occurrences)."""
         counter = self.payee_map.get(payee)
         if counter is None:
             return None
         return self._top_accounts(counter, min_count)
 
-    def get_accounts_by_normalized_payee(
-        self, payee: str, min_count: int = 3
-    ) -> list[str] | None:
+    def get_accounts_by_normalized_payee(self, payee: str, min_count: int = 3) -> list[str] | None:
         """Normalized payee → most common account set (≥ *min_count* occurrences)."""
         norm = normalize_payee(payee)
         if not norm:
@@ -131,9 +125,7 @@ class LedgerIndex:
             return None
         return self._top_accounts(counter, min_count)
 
-    def get_accounts_by_keyword(
-        self, narration: str, min_count: int = 3
-    ) -> list[str] | None:
+    def get_accounts_by_keyword(self, narration: str, min_count: int = 3) -> list[str] | None:
         """Keyword(s) extracted from narration → most common account set.
 
         Returns the account set of the keyword with the highest total
@@ -173,9 +165,7 @@ class LedgerIndex:
             return None
         return self._top_accounts(counter, min_count)
 
-    def get_counterpart(
-        self, account: str, min_count: int = 10
-    ) -> str | None:
+    def get_counterpart(self, account: str, min_count: int = 10) -> str | None:
         """Most common counterpart account for *account* (≥ *min_count* occurrences)."""
         counter = self.cooccur_map.get(account)
         if counter is None:
@@ -185,9 +175,7 @@ class LedgerIndex:
             return None
         return top_account
 
-    def get_tags(
-        self, payee: str, min_count: int = 5
-    ) -> list[str]:
+    def get_tags(self, payee: str, min_count: int = 5) -> list[str]:
         """Return tags that appear ≥ *min_count* times for *payee*.
 
         Uses normalized payee to handle variant names.
@@ -197,8 +185,4 @@ class LedgerIndex:
         counter = self.tag_map.get(norm)
         if counter is None:
             return []
-        return [
-            tag
-            for tag, count in counter.most_common()
-            if count >= min_count
-        ]
+        return [tag for tag, count in counter.most_common() if count >= min_count]

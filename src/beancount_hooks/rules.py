@@ -70,8 +70,7 @@ class RulesPostingsPredictor:
             index = self._get_or_build_index(existing_entries)
         except Exception:
             logger.warning(
-                "RulesPostingsPredictor: failed to build LedgerIndex, "
-                "passing through.",
+                'RulesPostingsPredictor: failed to build LedgerIndex, passing through.',
                 exc_info=True,
             )
             return imported_entries
@@ -88,9 +87,8 @@ class RulesPostingsPredictor:
                         entries[i] = new_entry
                 except Exception:
                     logger.warning(
-                        "RulesPostingsPredictor: prediction failed for entry "
-                        "%s, skipping.",
-                        entry.narration or entry.payee or "<unknown>",
+                        'RulesPostingsPredictor: prediction failed for entry %s, skipping.',
+                        entry.narration or entry.payee or '<unknown>',
                         exc_info=True,
                     )
 
@@ -120,8 +118,8 @@ class RulesPostingsPredictor:
 
         Returns a list of account strings for the *other* leg(s), or None.
         """
-        payee = entry.payee or ""
-        narration = entry.narration or ""
+        payee = entry.payee or ''
+        narration = entry.narration or ''
 
         # Helper: only keep accounts that are NOT the importer account.
         def _filter_importer(accounts: list[str] | None) -> list[str] | None:
@@ -134,9 +132,7 @@ class RulesPostingsPredictor:
             return None
 
         # Rule 1: Exact payee match.
-        result = _filter_importer(
-            index.get_accounts_by_payee(payee, self.min_occurrence)
-        )
+        result = _filter_importer(index.get_accounts_by_payee(payee, self.min_occurrence))
         if result:
             return result
 
@@ -148,9 +144,7 @@ class RulesPostingsPredictor:
             return result
 
         # Rule 3: Narration keyword match.
-        result = _filter_importer(
-            index.get_accounts_by_keyword(narration, self.min_occurrence)
-        )
+        result = _filter_importer(index.get_accounts_by_keyword(narration, self.min_occurrence))
         if result:
             return result
 
@@ -175,9 +169,7 @@ class RulesPostingsPredictor:
 
         # Rule 5: Account co-occurrence (weakest, requires ≥10 by default).
         if self.enable_rule_5 and importer_account:
-            counterpart = index.get_counterpart(
-                importer_account, min_count=10
-            )
+            counterpart = index.get_counterpart(importer_account, min_count=10)
             if counterpart:
                 return [counterpart]
 
@@ -201,7 +193,7 @@ class RulesPostingsPredictor:
             new_postings.append(
                 Posting(
                     account=account,
-                    units=Amount(ZERO, "CHF"),
+                    units=Amount(ZERO, 'CHF'),
                     cost=None,
                     price=None,
                     flag=None,
@@ -228,9 +220,8 @@ class RulesPayeePredictor:
                         entries[i] = new_entry
                 except Exception:
                     logger.warning(
-                        "RulesPayeePredictor: failed for entry %s, "
-                        "skipping.",
-                        entry.narration or "<unknown>",
+                        'RulesPayeePredictor: failed for entry %s, skipping.',
+                        entry.narration or '<unknown>',
                         exc_info=True,
                     )
         return imported_entries
@@ -240,8 +231,8 @@ class RulesPayeePredictor:
 
         Returns a (possibly modified) Transaction.
         """
-        payee = entry.payee or ""
-        narration = entry.narration or ""
+        payee = entry.payee or ''
+        narration = entry.narration or ''
 
         # Rule 1: Normalize importer-provided payee.
         normalized = normalize_payee(payee)
@@ -264,27 +255,27 @@ class RulesPayeePredictor:
         lower = narration.lower().strip()
 
         # "Salary from X" → X
-        m = re.search(r"salary\s+from\s+(.+)", lower)
+        m = re.search(r'salary\s+from\s+(.+)', lower)
         if m:
             return m.group(1).strip().title()
 
         # "Invoice.*from X" → X
-        m = re.search(r"invoice.*from\s+(.+)", lower)
+        m = re.search(r'invoice.*from\s+(.+)', lower)
         if m:
             return m.group(1).strip().title()
 
         # "Transfer to X" → X
-        m = re.search(r"transfer\s+to\s+(.+)", lower)
+        m = re.search(r'transfer\s+to\s+(.+)', lower)
         if m:
             return m.group(1).strip().title()
 
         # "Payment to X" → X
-        m = re.search(r"payment\s+to\s+(.+)", lower)
+        m = re.search(r'payment\s+to\s+(.+)', lower)
         if m:
             return m.group(1).strip().title()
 
         # "X GmbH / X AG" trailing
-        m = re.search(r"([\w\s]+(?:\s+gmbh|\s+ag|\s+sa|\s+sarl))", lower)
+        m = re.search(r'([\w\s]+(?:\s+gmbh|\s+ag|\s+sa|\s+sarl))', lower)
         if m:
             return m.group(1).strip().title()
 
@@ -313,8 +304,7 @@ class RulesTagsPredictor:
             index = self._get_or_build_index(existing_entries)
         except Exception:
             logger.warning(
-                "RulesTagsPredictor: failed to build LedgerIndex, "
-                "passing through.",
+                'RulesTagsPredictor: failed to build LedgerIndex, passing through.',
                 exc_info=True,
             )
             return imported_entries
@@ -325,13 +315,13 @@ class RulesTagsPredictor:
                     predicted = self._predict(entry, index)
                     if predicted:
                         new_entry = entry._replace(
-                            meta={**entry.meta, "predicted_tags": ",".join(predicted)}
+                            meta={**entry.meta, 'predicted_tags': ','.join(predicted)}
                         )
                         entries[i] = new_entry
                 except Exception:
                     logger.warning(
-                        "RulesTagsPredictor: failed for entry %s, skipping.",
-                        entry.narration or entry.payee or "<unknown>",
+                        'RulesTagsPredictor: failed for entry %s, skipping.',
+                        entry.narration or entry.payee or '<unknown>',
                         exc_info=True,
                     )
 
@@ -349,7 +339,7 @@ class RulesTagsPredictor:
 
     def _predict(self, entry: Transaction, index: LedgerIndex) -> list[str]:
         """Apply tag prediction rules."""
-        payee = entry.payee or ""
+        payee = entry.payee or ''
         frozenset(p.account for p in entry.postings if p.account)
 
         # Rule 1: payee → tags (now looks up by normalized payee only)

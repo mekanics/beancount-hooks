@@ -20,13 +20,13 @@ def _txn(
     lineno: int = 1,
 ) -> Transaction:
     """Build a synthetic Transaction."""
-    meta = new_metadata("test.beancount", lineno)
+    meta = new_metadata('test.beancount', lineno)
     if amounts is None:
-        amounts = ["-100"]
+        amounts = ['-100']
     postings = []
     for i, account in enumerate(accounts):
-        number = D(amounts[i]) if i < len(amounts) else D("0")
-        currency = "CHF"
+        number = D(amounts[i]) if i < len(amounts) else D('0')
+        currency = 'CHF'
         postings.append(
             Posting(
                 account=account,
@@ -40,7 +40,7 @@ def _txn(
     return Transaction(
         meta=meta,
         date=date or datetime.date(2024, 1, lineno),
-        flag="*",
+        flag='*',
         payee=payee,
         narration=narration,
         tags=frozenset(tags) if tags else frozenset(),
@@ -53,11 +53,11 @@ def _txn(
 def single_txn() -> Transaction:
     """A single simple transaction."""
     return _txn(
-        payee="Migros",
-        narration="Weekly groceries",
-        accounts=["Assets:Bank:CHF", "Expenses:Groceries"],
-        amounts=["-125.50", "125.50"],
-        tags=["#food"],
+        payee='Migros',
+        narration='Weekly groceries',
+        accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+        amounts=['-125.50', '125.50'],
+        tags=['#food'],
         lineno=1,
     )
 
@@ -67,11 +67,11 @@ def ledger_migros() -> list[Transaction]:
     """A small ledger with repeated Migros transactions."""
     return [
         _txn(
-            payee="Migros",
-            narration="Groceries",
-            accounts=["Assets:Bank:CHF", "Expenses:Groceries"],
-            amounts=["-120.00", "120.00"],
-            tags=["#food"],
+            payee='Migros',
+            narration='Groceries',
+            accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+            amounts=['-120.00', '120.00'],
+            tags=['#food'],
             lineno=i,
         )
         for i in range(1, 6)  # 5 occurrences
@@ -86,11 +86,11 @@ def ledger_multi_payee() -> list[Transaction]:
     for i in range(1, 6):
         txns.append(
             _txn(
-                payee="Migros",
-                narration="Weekly groceries",
-                accounts=["Assets:Bank:CHF", "Expenses:Groceries"],
-                amounts=["-100", "100"],
-                tags=["#food"],
+                payee='Migros',
+                narration='Weekly groceries',
+                accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+                amounts=['-100', '100'],
+                tags=['#food'],
                 lineno=i,
             )
         )
@@ -98,11 +98,11 @@ def ledger_multi_payee() -> list[Transaction]:
     for i in range(6, 10):
         txns.append(
             _txn(
-                payee="Coop",
-                narration="Quick shop",
-                accounts=["Assets:Bank:CHF", "Expenses:Groceries"],
-                amounts=["-45", "45"],
-                tags=["#food"],
+                payee='Coop',
+                narration='Quick shop',
+                accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+                amounts=['-45', '45'],
+                tags=['#food'],
                 lineno=i,
             )
         )
@@ -110,11 +110,11 @@ def ledger_multi_payee() -> list[Transaction]:
     for i in range(10, 13):
         txns.append(
             _txn(
-                payee="SBB CFF FFS",
-                narration="Train ticket",
-                accounts=["Assets:Bank:CHF", "Expenses:Transport"],
-                amounts=["-65", "65"],
-                tags=["#travel"],
+                payee='SBB CFF FFS',
+                narration='Train ticket',
+                accounts=['Assets:Bank:CHF', 'Expenses:Transport'],
+                amounts=['-65', '65'],
+                tags=['#travel'],
                 lineno=i,
             )
         )
@@ -122,11 +122,11 @@ def ledger_multi_payee() -> list[Transaction]:
     for i in range(13, 18):
         txns.append(
             _txn(
-                payee="Acme Corp",
-                narration="Monthly salary",
-                accounts=["Assets:Bank:CHF", "Income:Salary"],
-                amounts=["5000", "-5000"],
-                tags=["#income"],
+                payee='Acme Corp',
+                narration='Monthly salary',
+                accounts=['Assets:Bank:CHF', 'Income:Salary'],
+                amounts=['5000', '-5000'],
+                tags=['#income'],
                 lineno=i,
             )
         )
@@ -134,11 +134,11 @@ def ledger_multi_payee() -> list[Transaction]:
     for i in range(18, 24):
         txns.append(
             _txn(
-                payee="Landlord AG",
-                narration="Rent payment",
-                accounts=["Assets:Bank:CHF", "Expenses:Housing:Rent"],
-                amounts=["-1800", "1800"],
-                tags=["#housing", "#recurring"],
+                payee='Landlord AG',
+                narration='Rent payment',
+                accounts=['Assets:Bank:CHF', 'Expenses:Housing:Rent'],
+                amounts=['-1800', '1800'],
+                tags=['#housing', '#recurring'],
                 lineno=i,
             )
         )
@@ -157,9 +157,9 @@ def ledger_no_payee() -> list[Transaction]:
     return [
         _txn(
             payee=None,
-            narration="ATM withdrawal",
-            accounts=["Assets:Bank:CHF", "Assets:Cash"],
-            amounts=["-200", "200"],
+            narration='ATM withdrawal',
+            accounts=['Assets:Bank:CHF', 'Assets:Cash'],
+            amounts=['-200', '200'],
             lineno=1,
         ),
     ]
@@ -169,18 +169,18 @@ def ledger_no_payee() -> list[Transaction]:
 def ledger_normalized_payees() -> list[Transaction]:
     """Ledger with payee variants that normalize to the same value."""
     variants = [
-        "Migros Zürich",
-        "Migros Basel",
-        "MIGROS BERN",
-        "Migros",
-        "Migrolino",
+        'Migros Zürich',
+        'Migros Basel',
+        'MIGROS BERN',
+        'Migros',
+        'Migrolino',
     ]
     return [
         _txn(
             payee=variant,
-            narration="Shopping",
-            accounts=["Assets:Bank:CHF", "Expenses:Groceries"],
-            amounts=["-50", "50"],
+            narration='Shopping',
+            accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+            amounts=['-50', '50'],
             lineno=i + 1,
         )
         for i, variant in enumerate(variants)
@@ -192,10 +192,10 @@ def ledger_amount_patterns() -> list[Transaction]:
     """Ledger with recurring amount patterns."""
     return [
         _txn(
-            payee="Landlord AG",
-            narration="Rent",
-            accounts=["Assets:Bank:CHF", "Expenses:Housing:Rent"],
-            amounts=["-1800", "1800"],
+            payee='Landlord AG',
+            narration='Rent',
+            accounts=['Assets:Bank:CHF', 'Expenses:Housing:Rent'],
+            amounts=['-1800', '1800'],
             lineno=i,
         )
         for i in range(1, 6)
@@ -207,14 +207,14 @@ def ledger_multi_leg() -> list[Transaction]:
     """Ledger with a 3-leg transaction."""
     return [
         _txn(
-            payee="Split Bill",
-            narration="Dinner with friends",
+            payee='Split Bill',
+            narration='Dinner with friends',
             accounts=[
-                "Assets:Bank:CHF",
-                "Expenses:Food",
-                "Liabilities:Friend",
+                'Assets:Bank:CHF',
+                'Expenses:Food',
+                'Liabilities:Friend',
             ],
-            amounts=["-150", "100", "50"],
+            amounts=['-150', '100', '50'],
             lineno=1,
         ),
     ]
