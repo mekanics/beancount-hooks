@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections import Counter
 
-import pytest
-
 from beancount_hooks.index import LedgerIndex
 from beancount_hooks.normalizer import normalize_payee
 

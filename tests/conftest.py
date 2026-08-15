@@ -25,10 +25,7 @@ def _txn(
         amounts = ["-100"]
     postings = []
     for i, account in enumerate(accounts):
-        if i < len(amounts):
-            number = D(amounts[i])
-        else:
-            number = D("0")
+        number = D(amounts[i]) if i < len(amounts) else D("0")
         currency = "CHF"
         postings.append(
             Posting(

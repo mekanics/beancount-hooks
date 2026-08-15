@@ -9,7 +9,6 @@ Pure Python, stdlib only.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from beancount.core.data import filter_txns
@@ -77,7 +76,7 @@ class RulesPostingsPredictor:
             )
             return imported_entries
 
-        for filename, entries, account, importer in imported_entries:
+        for _filename, entries, account, _importer in imported_entries:
             for i, entry in enumerate(filter_txns(entries)):
                 try:
                     predicted = self._predict(entry, account, index)
@@ -191,8 +190,8 @@ class RulesPostingsPredictor:
         zero amount so the user can review in Fava.
         """
         existing_accounts = {p.account for p in entry.postings if p.account}
-        from beancount.core.data import Posting
         from beancount.core.amount import Amount
+        from beancount.core.data import Posting
         from beancount.core.number import ZERO
 
         new_postings = list(entry.postings)
@@ -221,7 +220,7 @@ class RulesPayeePredictor:
         existing_entries: list,
     ) -> list[tuple[str, list, str, object]]:
         """Normalize payee and attempt to derive from narration if missing."""
-        for filename, entries, account, importer in imported_entries:
+        for _filename, entries, _account, _importer in imported_entries:
             for i, entry in enumerate(filter_txns(entries)):
                 try:
                     new_entry = self._predict(entry)
@@ -320,7 +319,7 @@ class RulesTagsPredictor:
             )
             return imported_entries
 
-        for filename, entries, account, importer in imported_entries:
+        for _filename, entries, _account, _importer in imported_entries:
             for i, entry in enumerate(filter_txns(entries)):
                 try:
                     predicted = self._predict(entry, index)
@@ -351,7 +350,7 @@ class RulesTagsPredictor:
     def _predict(self, entry: Transaction, index: LedgerIndex) -> list[str]:
         """Apply tag prediction rules."""
         payee = entry.payee or ""
-        accounts = frozenset(p.account for p in entry.postings if p.account)
+        frozenset(p.account for p in entry.postings if p.account)
 
         # Rule 1: payee → tags (now looks up by normalized payee only)
         tags = index.get_tags(payee, self.min_tag_occurrence)
