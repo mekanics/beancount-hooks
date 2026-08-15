@@ -1,5 +1,0 @@
-
-[dev]
-beancount>=3.0
-beangulp>=0.2.0
-pytest>=8.0
