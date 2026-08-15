@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from beancount_hooks.normalizer import extract_keywords, normalize_payee, round_to_bin
 
 

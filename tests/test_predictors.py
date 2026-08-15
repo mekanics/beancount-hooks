@@ -5,8 +5,8 @@ from __future__ import annotations
 import datetime
 
 from beancount.core.amount import Amount
-from beancount.core.data import Posting, Transaction, new_metadata, filter_txns
-from beancount.core.number import D, ZERO
+from beancount.core.data import Posting, Transaction, filter_txns, new_metadata
+from beancount.core.number import D
 
 from beancount_hooks.rules import (
     RulesPayeePredictor,
@@ -132,8 +132,9 @@ class TestRulesPostingsPredictor:
     def test_rule_5_counterpart_above_threshold(self) -> None:
         # Build a ledger where Expenses:Groceries appears ≥10 times.
         from datetime import date
-        from beancount.core.data import Transaction, Posting, new_metadata
+
         from beancount.core.amount import Amount
+        from beancount.core.data import Posting, Transaction, new_metadata
         from beancount.core.number import D
 
         entries = []
@@ -161,8 +162,9 @@ class TestRulesPostingsPredictor:
         # Let's test when importer account is NOT in predicted set.
         # Create a ledger where Migros maps to a set without Assets:Bank:CHF.
         from datetime import date
-        from beancount.core.data import Transaction, Posting, new_metadata
+
         from beancount.core.amount import Amount
+        from beancount.core.data import Posting, Transaction, new_metadata
         from beancount.core.number import D
 
         def _make_txn(p, n, accts):
