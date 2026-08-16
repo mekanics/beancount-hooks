@@ -177,7 +177,7 @@ def ledger_normalized_payees() -> list[Transaction]:
         'Migros Basel',
         'MIGROS BERN',
         'Migros',
-        'Migrolino',
+        'Migros 8001',
     ]
     return [
         _txn(
