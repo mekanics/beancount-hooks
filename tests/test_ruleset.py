@@ -71,7 +71,7 @@ def loads_cleanly(transaction: Transaction, accounts: list[str]) -> list[str]:
 
 
 class TestRealWorldRules:
-    """Transcriptions of the awkward cases from the ledger this library was built for."""
+    """Cases that exercise splits, pinned amounts, and sign-sensitive matches."""
 
     def test_rental_halves_a_shared_payout(self) -> None:
         """Income shared with someone else: half owed to them, half booked as income."""
@@ -89,13 +89,18 @@ class TestRealWorldRules:
                 )
             ]
         )
-        result = rules.apply(txn(payee='RentalPlatform AG', narration='Rental payout', amount='100.00'))
+        result = rules.apply(
+            txn(payee='RentalPlatform AG', narration='Rental payout', amount='100.00')
+        )
         assert postings_of(result) == [
             (BANK, '100.00 CHF'),
             ('Assets:Owed-to-Me:Friend', '-50.00 CHF'),
             ('Income:Rental:Platform', '-50.00 CHF'),
         ]
-        assert loads_cleanly(result, [BANK, 'Assets:Owed-to-Me:Friend', 'Income:Rental:Platform']) == []
+        assert (
+            loads_cleanly(result, [BANK, 'Assets:Owed-to-Me:Friend', 'Income:Rental:Platform'])
+            == []
+        )
 
     def test_rent_pins_utilities_and_interpolates_the_rest(self) -> None:
         """A fixed utilities share, with rent taking whatever remains."""
@@ -106,19 +111,17 @@ class TestRealWorldRules:
                 Rule(
                     Match(payee='PropertyMgmt'),
                     Actions(
-                        post=((utilities, Amount(D('175.00'), 'CHF')), rent),
+                        post=((utilities, Amount(D('150.00'), 'CHF')), rent),
                         tags=('recurring',),
                     ),
                     name='landlord-rent',
                 )
             ]
         )
-        result = rules.apply(
-            txn(payee='PropertyMgmt AG', narration='Miete', amount='-2000.00')
-        )
+        result = rules.apply(txn(payee='PropertyMgmt AG', narration='Rent', amount='-1800.00'))
         assert postings_of(result) == [
-            (BANK, '-2000.00 CHF'),
-            (utilities, '175.00 CHF'),
+            (BANK, '-1800.00 CHF'),
+            (utilities, '150.00 CHF'),
             (rent, None),
         ]
         assert result.tags == frozenset({'recurring'})
@@ -136,14 +139,20 @@ class TestRealWorldRules:
                 Rule(
                     Match(payee='Selecta', sign='debit', amount_lt=D('2')),
                     Actions(
-                        narration='☕️ Coffee', post=food, tags=('business',), links=('reimbursable',)
+                        narration='☕️ Coffee',
+                        post=food,
+                        tags=('business',),
+                        links=('reimbursable',),
                     ),
                     name='selecta-coffee',
                 ),
                 Rule(
                     Match(payee='Selecta', sign='debit'),
                     Actions(
-                        narration='Mittagessen', post=food, tags=('business',), links=('reimbursable',)
+                        narration='Mittagessen',
+                        post=food,
+                        tags=('business',),
+                        links=('reimbursable',),
                     ),
                     name='selecta-lunch',
                 ),
@@ -242,7 +251,10 @@ class TestMatch:
         assert match.test(txn(amount='10.00'))
 
     def test_amount_compares_numerically_not_by_scale(self) -> None:
-        """Importers are inconsistent about trailing zeros: one importer emits -10.0, not -10.00."""
+        """Importers are inconsistent about trailing zeros.
+
+        One importer emits -10.0, not -10.00.
+        """
         match = Match(amount=D('10.00'), sign='debit')
         assert match.test(txn(amount='-10.0'))
         assert match.test(txn(amount='-10'))
@@ -465,7 +477,7 @@ class TestRuleset:
         assert rules.explain(txn(payee='Migros')) == []
 
     def test_shadowed_detects_a_general_rule_placed_first(self) -> None:
-        """The ordering mistake the old importer warns about in a comment."""
+        """The ordering mistake a previous importer warned about in a comment."""
         rules = Ruleset(
             [
                 Rule(Match(payee='Coop'), Actions(payee='Coop'), name='generic'),

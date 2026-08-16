@@ -296,7 +296,7 @@ class TestRulesPayeePredictor:
             'SBB CFF FFS',  # normalize_payee -> 'sbb'
             'Migros Zürich',  # -> 'migros'
             'b.side digital GmbH',  # -> 'b.side digital'
-            'PropertyMgmt AG',  # -> 'property-mgmt'
+            'Property-Mgmt AG',  # -> 'property-mgmt'
         ],
     )
     def test_never_overwrites_an_existing_payee(self, payee, ledger_multi_payee) -> None:
@@ -517,8 +517,8 @@ class TestPredictedPostingsBalance:
         history = [
             _split_txn(
                 'HealthInsurer',
-                '-541.75',
-                {'Expenses:Insurance:KVG': '431.65', 'Expenses:Insurance:VVG': '110.10'},
+                '-400.00',
+                {'Expenses:Insurance:KVG': '300.00', 'Expenses:Insurance:VVG': '100.00'},
                 month,
             )
             for month in range(1, 4)
@@ -526,8 +526,8 @@ class TestPredictedPostingsBalance:
             # Next year's premium: same cover, a different division of it.
             _split_txn(
                 'HealthInsurer',
-                '-598.30',
-                {'Expenses:Insurance:KVG': '502.20', 'Expenses:Insurance:VVG': '96.10'},
+                '-450.00',
+                {'Expenses:Insurance:KVG': '350.00', 'Expenses:Insurance:VVG': '100.00'},
                 month,
             )
             for month in range(4, 7)
