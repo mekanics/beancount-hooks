@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+import datetime
 from collections import Counter
+
+from beancount.core.amount import Amount
+from beancount.core.data import Posting, Transaction, new_metadata
+from beancount.core.number import D
 
 from beancount_hooks.index import LedgerIndex
 from beancount_hooks.normalizer import normalize_payee
+
+
+def _tagged_txn(payee: str, tags: frozenset[str]) -> Transaction:
+    """A one-payee transaction, for asking what share of them carries a tag."""
+    return Transaction(
+        new_metadata('ledger.bean', 1),
+        datetime.date(2026, 1, 1),
+        '*',
+        payee,
+        '',
+        tags,
+        frozenset(),
+        [
+            Posting('Assets:Bank:CHF', Amount(D('-10.00'), 'CHF'), None, None, None, None),
+            Posting('Expenses:Other', Amount(D('10.00'), 'CHF'), None, None, None, None),
+        ],
+    )
 
 
 class TestLedgerIndexInit:
@@ -39,7 +61,7 @@ class TestLedgerIndexInit:
 
         # Tags (now keyed by normalized payee only).
         assert 'migros' in idx.tag_map
-        assert '#food' in idx.tag_map.get('migros', Counter())
+        assert 'food' in idx.tag_map.get('migros', Counter())
 
 
 class TestGetAccountsByPayee:
@@ -126,8 +148,8 @@ class TestGetTags:
         idx = LedgerIndex(ledger_multi_payee)
         # get_tags now uses normalized payee only (no account_set param).
         result = idx.get_tags('Landlord AG', min_count=5)
-        assert '#housing' in result
-        assert '#recurring' in result
+        assert 'housing' in result
+        assert 'recurring' in result
 
     def test_below_threshold(self, ledger_multi_payee) -> None:
         idx = LedgerIndex(ledger_multi_payee)
@@ -138,6 +160,36 @@ class TestGetTags:
         idx = LedgerIndex(ledger_no_payee)
         result = idx.get_tags('', min_count=1)
         assert result == []
+
+    def test_a_tag_on_a_minority_of_a_payees_transactions_is_not_a_property_of_it(self) -> None:
+        """Five occurrences out of a hundred is a leftover from one trip, not a payee's habit.
+
+        A placeholder payee is the sharp case: "self" names every transfer between one's own
+        accounts, so the count alone lets a holiday tag from a few of them attach to all.
+        """
+        history = [
+            _tagged_txn('self', frozenset({'travel', 'philippines-2024'}) if i < 6 else frozenset())
+            for i in range(100)
+        ]
+        idx = LedgerIndex(history)
+        assert sorted(idx.get_tags('self', min_count=5)) == ['philippines-2024', 'travel']
+        assert idx.get_tags('self', min_count=5, min_share=0.6) == []
+
+    def test_a_tag_the_payee_usually_carries_still_qualifies(self) -> None:
+        history = [
+            _tagged_txn('FelFel', frozenset({'business'}) if i < 28 else frozenset())
+            for i in range(30)
+        ]
+        idx = LedgerIndex(history)
+        assert idx.get_tags('FelFel', min_count=5, min_share=0.6) == ['business']
+
+    def test_share_counts_untagged_transactions_in_the_denominator(self) -> None:
+        """The bug this guards: tag_map only ever saw transactions that had a tag."""
+        history = [_tagged_txn('Migros', frozenset({'household'})) for _ in range(9)]
+        history += [_tagged_txn('Migros', frozenset()) for _ in range(91)]
+        idx = LedgerIndex(history)
+        assert idx.payee_total[normalize_payee('Migros')] == 100
+        assert idx.get_tags('Migros', min_count=5, min_share=0.6) == []
 
     def test_multi_leg(self, ledger_multi_leg) -> None:
         idx = LedgerIndex(ledger_multi_leg)
