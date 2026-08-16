@@ -19,7 +19,11 @@ def _txn(
     date: datetime.date | None = None,
     lineno: int = 1,
 ) -> Transaction:
-    """Build a synthetic Transaction."""
+    """Build a synthetic Transaction.
+
+    Tags are given without a leading ``#`` — that is how the Beancount parser stores
+    them, and predictors write straight back into ``entry.tags``.
+    """
     meta = new_metadata('test.beancount', lineno)
     if amounts is None:
         amounts = ['-100']
@@ -57,7 +61,7 @@ def single_txn() -> Transaction:
         narration='Weekly groceries',
         accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
         amounts=['-125.50', '125.50'],
-        tags=['#food'],
+        tags=['food'],
         lineno=1,
     )
 
@@ -71,7 +75,7 @@ def ledger_migros() -> list[Transaction]:
             narration='Groceries',
             accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
             amounts=['-120.00', '120.00'],
-            tags=['#food'],
+            tags=['food'],
             lineno=i,
         )
         for i in range(1, 6)  # 5 occurrences
@@ -90,7 +94,7 @@ def ledger_multi_payee() -> list[Transaction]:
                 narration='Weekly groceries',
                 accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
                 amounts=['-100', '100'],
-                tags=['#food'],
+                tags=['food'],
                 lineno=i,
             )
         )
@@ -102,7 +106,7 @@ def ledger_multi_payee() -> list[Transaction]:
                 narration='Quick shop',
                 accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
                 amounts=['-45', '45'],
-                tags=['#food'],
+                tags=['food'],
                 lineno=i,
             )
         )
@@ -114,7 +118,7 @@ def ledger_multi_payee() -> list[Transaction]:
                 narration='Train ticket',
                 accounts=['Assets:Bank:CHF', 'Expenses:Transport'],
                 amounts=['-65', '65'],
-                tags=['#travel'],
+                tags=['travel'],
                 lineno=i,
             )
         )
@@ -126,7 +130,7 @@ def ledger_multi_payee() -> list[Transaction]:
                 narration='Monthly salary',
                 accounts=['Assets:Bank:CHF', 'Income:Salary'],
                 amounts=['5000', '-5000'],
-                tags=['#income'],
+                tags=['income'],
                 lineno=i,
             )
         )
@@ -138,7 +142,7 @@ def ledger_multi_payee() -> list[Transaction]:
                 narration='Rent payment',
                 accounts=['Assets:Bank:CHF', 'Expenses:Housing:Rent'],
                 amounts=['-1800', '1800'],
-                tags=['#housing', '#recurring'],
+                tags=['housing', 'recurring'],
                 lineno=i,
             )
         )
