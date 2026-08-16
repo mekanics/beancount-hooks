@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "beancount-hooks"
-version = "0.1.0"
+version = "0.5.0"
 description = "Rule-based beangulp import hooks for Beancount v3"
 readme = "README.md"
 license = {text = "MIT"}
