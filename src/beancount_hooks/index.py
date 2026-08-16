@@ -111,13 +111,30 @@ class LedgerIndex:
     # Public query helpers
     # ------------------------------------------------------------------
 
-    def _top_accounts(self, counter: Counter[frozenset[str]], min_count: int) -> list[str] | None:
+    def _top_accounts(
+        self,
+        counter: Counter[frozenset[str]],
+        min_count: int,
+        containing: str | None = None,
+    ) -> list[str] | None:
         """Return the most common account set from a counter, or None.
 
         Only returns the accounts if the top entry's count is >= *min_count*.
+
+        *containing* narrows the field to the sets that include that account, which is how a
+        caller asks "how does this payee usually go **when paid from here**".  Without it a
+        payee that changed cards answers with the old one: the retired card wins on lifetime
+        count, the caller sees an account it isn't importing from and gets nothing, while the
+        current card sits in second place with years of history behind it.
         """
         if not counter:
             return None
+        if containing is not None:
+            counter = Counter(
+                {accounts: count for accounts, count in counter.items() if containing in accounts}
+            )
+            if not counter:
+                return None
         top_accounts, top_count = counter.most_common(1)[0]
         if top_count < min_count:
             return None
@@ -180,14 +197,18 @@ class LedgerIndex:
             shares.append((account, sum(values) / len(values)))
         return shares
 
-    def get_accounts_by_payee(self, payee: str, min_count: int = 3) -> list[str] | None:
+    def get_accounts_by_payee(
+        self, payee: str, min_count: int = 3, containing: str | None = None
+    ) -> list[str] | None:
         """Exact payee → most common account set (≥ *min_count* occurrences)."""
         counter = self.payee_map.get(payee)
         if counter is None:
             return None
-        return self._top_accounts(counter, min_count)
+        return self._top_accounts(counter, min_count, containing)
 
-    def get_accounts_by_normalized_payee(self, payee: str, min_count: int = 3) -> list[str] | None:
+    def get_accounts_by_normalized_payee(
+        self, payee: str, min_count: int = 3, containing: str | None = None
+    ) -> list[str] | None:
         """Normalized payee → most common account set (≥ *min_count* occurrences)."""
         norm = normalize_payee(payee)
         if not norm:
@@ -195,9 +216,11 @@ class LedgerIndex:
         counter = self.normalized_payee_map.get(norm)
         if counter is None:
             return None
-        return self._top_accounts(counter, min_count)
+        return self._top_accounts(counter, min_count, containing)
 
-    def get_accounts_by_keyword(self, narration: str, min_count: int = 3) -> list[str] | None:
+    def get_accounts_by_keyword(
+        self, narration: str, min_count: int = 3, containing: str | None = None
+    ) -> list[str] | None:
         """Keyword(s) extracted from narration → most common account set.
 
         Returns the account set of the keyword with the highest total
@@ -216,10 +239,7 @@ class LedgerIndex:
         if not aggregated:
             return None
 
-        top_accounts, top_count = aggregated.most_common(1)[0]
-        if top_count < min_count:
-            return None
-        return sorted(top_accounts)
+        return self._top_accounts(aggregated, min_count, containing)
 
     def get_accounts_by_amount(
         self,
@@ -228,6 +248,7 @@ class LedgerIndex:
         sign: int,
         bin_size: float = 10.0,
         min_count: int = 3,
+        containing: str | None = None,
     ) -> list[str] | None:
         """(Payee, amount bin, sign) → most common account set (≥ *min_count*)."""
         bin_val = round_to_bin(abs(amount), bin_size)
@@ -235,7 +256,7 @@ class LedgerIndex:
         counter = self.amount_map.get(key)
         if counter is None:
             return None
-        return self._top_accounts(counter, min_count)
+        return self._top_accounts(counter, min_count, containing)
 
     def get_counterpart(self, account: str, min_count: int = 10) -> str | None:
         """Most common counterpart account for *account* (≥ *min_count* occurrences)."""

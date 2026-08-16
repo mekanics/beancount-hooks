@@ -46,6 +46,9 @@ class RulesPostingsPredictor:
     Rungs 1 to 4 all key on something specific to the transaction.  Rung 5 does not — see
     ``enable_rule_5``, which is off by default.
 
+    Each rung asks about history funded from the account being imported, not about the payee in
+    general, so a subscription that moved between cards is answered by the card it is on now.
+
     Where a rung answers with several legs, the amount has to be divided between them, since
     Beancount interpolates only one posting per currency.  That is offered only where the
     ledger divides it the same way every time, within ``split_tolerance`` — a purchase halved
@@ -166,20 +169,27 @@ class RulesPostingsPredictor:
                 return None
             return [(account, fraction) for account, fraction in shares]
 
+        # Every rung asks only about history funded from the account being imported, so a payee
+        # that changed cards is answered by the card it is on now rather than the one it left.
+
         # Rule 1: Exact payee match.
-        result = _filter_importer(index.get_accounts_by_payee(payee, self.min_occurrence))
+        result = _filter_importer(
+            index.get_accounts_by_payee(payee, self.min_occurrence, importer_account)
+        )
         if result:
             return result
 
         # Rule 2: Normalized payee match.
         result = _filter_importer(
-            index.get_accounts_by_normalized_payee(payee, self.min_occurrence)
+            index.get_accounts_by_normalized_payee(payee, self.min_occurrence, importer_account)
         )
         if result:
             return result
 
         # Rule 3: Narration keyword match.
-        result = _filter_importer(index.get_accounts_by_keyword(narration, self.min_occurrence))
+        result = _filter_importer(
+            index.get_accounts_by_keyword(narration, self.min_occurrence, importer_account)
+        )
         if result:
             return result
 
@@ -196,7 +206,12 @@ class RulesPostingsPredictor:
         if amount is not None and sign is not None:
             result = _filter_importer(
                 index.get_accounts_by_amount(
-                    payee, amount, sign, self.amount_bin_size, self.min_occurrence
+                    payee,
+                    amount,
+                    sign,
+                    self.amount_bin_size,
+                    self.min_occurrence,
+                    importer_account,
                 )
             )
             if result:
