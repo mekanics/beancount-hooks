@@ -236,8 +236,6 @@ _LEGAL_SUFFIXES: Final[list[str]] = [
 _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     # Migros variants
     (r'^migros\s+.*', 'migros'),
-    (r'^migrolino\b', 'migros'),
-    (r'^migrol\b', 'migros'),
     # Coop variants
     (r'^coop\s+.*', 'coop'),
     (r'^coop\b', 'coop'),
@@ -258,6 +256,8 @@ _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     (r'^jumbo\s+.*', 'jumbo'),
     (r'^bauhaus\s+.*', 'bauhaus'),
     (r'^landi\s+.*', 'landi'),
+    (r'^migrolino\b', 'migrolino'),
+    (r'^migrol\b', 'migrol'),
     (r'^shell\s+.*', 'shell'),
     (r'^bp\s+.*', 'bp'),
     (r'^avia\s+.*', 'avia'),

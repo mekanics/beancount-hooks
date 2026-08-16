@@ -39,8 +39,13 @@ class TestNormalizePayee:
         assert normalize_payee('Migros Zürich') == 'migros'
         assert normalize_payee('Migros Basel') == 'migros'
         assert normalize_payee('MIGROS BERN') == 'migros'
-        assert normalize_payee('Migrolino') == 'migros'
-        assert normalize_payee('Migrol') == 'migros'
+
+    def test_migrol_and_migrolino_are_not_the_supermarket(self) -> None:
+        assert normalize_payee('Migrolino') == 'migrolino'
+        assert normalize_payee('Migrol') == 'migrol'
+        assert normalize_payee('Migrol Tanken (80.00)') == 'migrol'
+        assert normalize_payee('Migrolino Benzin') == 'migrolino'
+        assert normalize_payee('Migrolino Zürich HB') == 'migrolino'
 
     def test_unify_coop_variants(self) -> None:
         assert normalize_payee('Coop Pronto') == 'coop'
