@@ -83,6 +83,59 @@ class TestGetAccountsByPayee:
         assert result is None
 
 
+class TestAskingAboutOneAccount:
+    """A payee that changed cards has two shapes, and lifetime count favours the one it left.
+
+    Asking without naming an account gets the retired card, which is the honest answer to the
+    question but useless to an importer reading the new one.
+    """
+
+    def test_the_old_card_wins_on_count(self, ledger_changed_card) -> None:
+        idx = LedgerIndex(ledger_changed_card)
+        assert idx.get_accounts_by_payee('Nespresso', min_count=3) == [
+            'Assets:Card:Old',
+            'Expenses:Coffee',
+        ]
+
+    def test_naming_the_new_card_finds_its_own_history(self, ledger_changed_card) -> None:
+        idx = LedgerIndex(ledger_changed_card)
+        assert idx.get_accounts_by_payee(
+            'Nespresso', min_count=3, containing='Assets:Card:New'
+        ) == ['Assets:Card:New', 'Expenses:Coffee']
+
+    def test_an_account_with_too_little_behind_it_still_declines(self, ledger_changed_card) -> None:
+        """Narrowing picks a shape; it does not lower the bar for one."""
+        assert (
+            LedgerIndex(ledger_changed_card).get_accounts_by_payee(
+                'Nespresso', min_count=5, containing='Assets:Card:New'
+            )
+            is None
+        )
+
+    def test_an_account_the_payee_never_used_declines(self, ledger_changed_card) -> None:
+        assert (
+            LedgerIndex(ledger_changed_card).get_accounts_by_payee(
+                'Nespresso', min_count=1, containing='Assets:Card:Unrelated'
+            )
+            is None
+        )
+
+    def test_the_normalized_and_amount_rungs_narrow_too(self, ledger_changed_card) -> None:
+        idx = LedgerIndex(ledger_changed_card)
+        assert idx.get_accounts_by_normalized_payee(
+            'Nespresso', min_count=3, containing='Assets:Card:New'
+        ) == ['Assets:Card:New', 'Expenses:Coffee']
+        assert idx.get_accounts_by_amount(
+            'Nespresso', 25.0, -1, min_count=3, containing='Assets:Card:New'
+        ) == ['Assets:Card:New', 'Expenses:Coffee']
+
+    def test_the_keyword_rung_narrows_too(self, ledger_changed_card) -> None:
+        idx = LedgerIndex(ledger_changed_card)
+        assert idx.get_accounts_by_keyword(
+            'Coffee capsules', min_count=3, containing='Assets:Card:New'
+        ) == ['Assets:Card:New', 'Expenses:Coffee']
+
+
 class TestGetAccountsByNormalizedPayee:
     def test_normalized_match(self, ledger_normalized_payees) -> None:
         idx = LedgerIndex(ledger_normalized_payees)

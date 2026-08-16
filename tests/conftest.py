@@ -207,6 +207,27 @@ def ledger_amount_patterns() -> list[Transaction]:
 
 
 @pytest.fixture
+def ledger_changed_card() -> list[Transaction]:
+    """A subscription that moved from one card to another, and stayed on the new one.
+
+    The retired card still leads on lifetime count, so it is what any question about the payee
+    alone comes back with, however long ago the last charge was.
+    """
+    cards = ['Assets:Card:Old'] * 6 + ['Assets:Card:New'] * 4
+    return [
+        _txn(
+            payee='Nespresso',
+            narration='Coffee capsules',
+            accounts=[card, 'Expenses:Coffee'],
+            amounts=['-25.00', '25.00'],
+            date=datetime.date(2024, 1, 1) + datetime.timedelta(days=30 * month),
+            lineno=month + 1,
+        )
+        for month, card in enumerate(cards)
+    ]
+
+
+@pytest.fixture
 def ledger_multi_leg() -> list[Transaction]:
     """Ledger with a 3-leg transaction."""
     return [

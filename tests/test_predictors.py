@@ -463,6 +463,49 @@ class TestPredictedPostingsBalance:
         txn = _imported_txns(result)[0]
         assert [p.account for p in txn.postings] == ['Assets:Bank:CHF', 'Expenses:Groceries']
 
+    def test_a_payee_that_changed_cards_is_answered_by_the_card_it_is_on(
+        self, ledger_changed_card
+    ) -> None:
+        """The retired card leads on lifetime count and is not what the importer is reading.
+
+        Before every rung asked about one account, the payee rungs came back with the old card,
+        the mismatch was thrown away, and a subscription with years of history on the current
+        card got nothing.
+        """
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Nespresso',
+            narration='Coffee capsules',
+            importer_account='Assets:Card:New',
+            amounts=['-25.00'],
+        )
+        txn = _imported_txns(predictor.hook(imported, ledger_changed_card))[0]
+        assert [p.account for p in txn.postings] == ['Assets:Card:New', 'Expenses:Coffee']
+        assert txn.postings[1].units is None
+
+    def test_the_old_card_is_never_offered_as_the_other_leg(self, ledger_changed_card) -> None:
+        """Narrowing must not turn the retired card into a counterpart of the new one."""
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Nespresso',
+            narration='Coffee capsules',
+            importer_account='Assets:Card:New',
+            amounts=['-25.00'],
+        )
+        txn = _imported_txns(predictor.hook(imported, ledger_changed_card))[0]
+        assert 'Assets:Card:Old' not in [p.account for p in txn.postings]
+
+    def test_a_card_the_payee_never_touched_gets_no_prediction(self, ledger_changed_card) -> None:
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Nespresso',
+            narration='Coffee capsules',
+            importer_account='Assets:Card:Third',
+            amounts=['-25.00'],
+        )
+        txn = _imported_txns(predictor.hook(imported, ledger_changed_card))[0]
+        assert [p.account for p in txn.postings] == ['Assets:Card:Third']
+
     def test_a_split_in_no_settled_proportion_gets_no_prediction(self) -> None:
         """Beancount accepts only one posting without an amount.
 
