@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 
+import pytest
 from beancount.core.amount import Amount
 from beancount.core.data import Posting, Transaction, filter_txns, new_metadata
 from beancount.core.number import D
@@ -69,6 +70,45 @@ def _imported_txns(imported) -> list[Transaction]:
 
 def _account_names(txn: Transaction) -> list[str]:
     return sorted({p.account for p in txn.postings if p.account})
+
+
+def _split_txn(
+    payee: str,
+    source: str,
+    legs: dict[str, str],
+    month: int,
+    source_account: str = 'Assets:Bank:CHF',
+) -> Transaction:
+    """A historical transaction where *source* was divided across *legs*."""
+    return Transaction(
+        new_metadata('ledger.bean', month),
+        datetime.date(2025, month, 1),
+        '*',
+        payee,
+        '',
+        frozenset(),
+        frozenset(),
+        [
+            Posting(source_account, Amount(D(source), 'CHF'), None, None, None, None),
+            *(
+                Posting(account, Amount(D(value), 'CHF'), None, None, None, None)
+                for account, value in legs.items()
+            ),
+        ],
+    )
+
+
+def _loads_cleanly(txn: Transaction) -> bool:
+    """Whether Beancount accepts *txn* — the check a balance or auto-posting bug fails."""
+    from beancount import loader
+    from beancount.parser import printer
+
+    header = 'option "operating_currency" "CHF"\n' + ''.join(
+        f'2020-01-01 open {account}\n' for account in _account_names(txn)
+    )
+    _entries, errors, _options = loader.load_string(header + '\n' + printer.format_entry(txn))
+    assert errors == [], [printer.format_error(e) for e in errors]
+    return True
 
 
 # =============================================================================
@@ -250,12 +290,26 @@ class TestRulesPostingsPredictor:
 
 
 class TestRulesPayeePredictor:
-    def test_normalize_payee(self, ledger_multi_payee) -> None:
+    @pytest.mark.parametrize(
+        'payee',
+        [
+            'SBB CFF FFS',  # normalize_payee -> 'sbb'
+            'Migros Zürich',  # -> 'migros'
+            'b.side digital GmbH',  # -> 'b.side digital'
+            'PropertyMgmt AG',  # -> 'property-mgmt'
+        ],
+    )
+    def test_never_overwrites_an_existing_payee(self, payee, ledger_multi_payee) -> None:
+        """normalize_payee produces index keys, not display names.
+
+        Writing them back to entry.payee destroys curated names — including the ones a
+        Ruleset deliberately set.  Predictors fill blanks; they never overwrite.
+        """
         predictor = RulesPayeePredictor()
-        imported = _make_imported(payee='SBB CFF FFS', narration='Train')
+        imported = _make_imported(payee=payee, narration='Whatever')
         result = predictor.hook(imported, ledger_multi_payee)
         txn = _imported_txns(result)[0]
-        assert txn.payee == 'sbb'
+        assert txn.payee == payee
 
     def test_derive_from_narration_salary(self, ledger_multi_payee) -> None:
         predictor = RulesPayeePredictor()
@@ -276,9 +330,17 @@ class TestRulesPayeePredictor:
         imported = _make_imported(payee='Local Shop', narration='Purchase')
         result = predictor.hook(imported, ledger_multi_payee)
         txn = _imported_txns(result)[0]
-        # Normalization only changes payee when it strips suffixes or unifies variants.
-        # "Local Shop" has nothing to normalize → stays as-is.
         assert txn.payee == 'Local Shop'
+
+    def test_missing_payee_with_unrecognised_narration_stays_empty(
+        self, ledger_multi_payee
+    ) -> None:
+        predictor = RulesPayeePredictor()
+        imported = _make_imported(payee='', narration='POS 4711 Zürich')
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        # A blank prediction beats a wrong one.
+        assert not txn.payee
 
 
 # =============================================================================
@@ -287,10 +349,13 @@ class TestRulesPayeePredictor:
 
 
 class TestRulesTagsPredictor:
-    def test_tag_prediction(self, ledger_multi_payee) -> None:
+    def test_tag_prediction_writes_native_tags(self, ledger_multi_payee) -> None:
+        """Tags belong on entry.tags, not in meta.
+
+        A meta key renders as `predicted_tags: "housing,recurring"`, which the user then
+        has to retype as `#housing #recurring` by hand.
+        """
         predictor = RulesTagsPredictor(min_tag_occurrence=5, max_tags=3)
-        # Tags are keyed by (payee, account_set). Must use the same accounts
-        # as appear in the ledger fixture for a match.
         imported = _make_imported(
             payee='Landlord AG',
             narration='Rent',
@@ -299,10 +364,22 @@ class TestRulesTagsPredictor:
         )
         result = predictor.hook(imported, ledger_multi_payee)
         txn = _imported_txns(result)[0]
-        assert 'predicted_tags' in txn.meta
-        tags_str = txn.meta['predicted_tags']
-        assert '#housing' in tags_str
-        assert '#recurring' in tags_str
+        assert txn.tags == frozenset({'housing', 'recurring'})
+        assert 'predicted_tags' not in txn.meta
+
+    def test_existing_tags_are_preserved(self, ledger_multi_payee) -> None:
+        predictor = RulesTagsPredictor(min_tag_occurrence=5, max_tags=3)
+        imported = _make_imported(
+            payee='Landlord AG',
+            narration='Rent',
+            amounts=['-1800', '1800'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Housing:Rent'],
+        )
+        entries = imported[0][1]
+        entries[0] = entries[0]._replace(tags=frozenset({'business'}))
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        assert txn.tags == frozenset({'business', 'housing', 'recurring'})
 
     def test_below_threshold(self, ledger_multi_payee) -> None:
         predictor = RulesTagsPredictor(min_tag_occurrence=20, max_tags=3)
@@ -310,19 +387,221 @@ class TestRulesTagsPredictor:
         result = predictor.hook(imported, ledger_multi_payee)
         txn = _imported_txns(result)[0]
         # Landlord AG tags appear 6 times each, below threshold of 20.
-        assert 'predicted_tags' not in txn.meta
+        assert txn.tags == frozenset()
 
     def test_empty_ledger(self, ledger_empty) -> None:
         predictor = RulesTagsPredictor(min_tag_occurrence=1, max_tags=3)
         imported = _make_imported(payee='Landlord AG', narration='Rent')
         result = predictor.hook(imported, ledger_empty)
         txn = _imported_txns(result)[0]
-        assert 'predicted_tags' not in txn.meta
+        assert txn.tags == frozenset()
 
     def test_max_tags_limit(self, ledger_multi_payee) -> None:
         predictor = RulesTagsPredictor(min_tag_occurrence=1, max_tags=1)
         imported = _make_imported(payee='Landlord AG', narration='Rent', amounts=['-1800', '1800'])
         result = predictor.hook(imported, ledger_multi_payee)
         txn = _imported_txns(result)[0]
-        tags_str = txn.meta.get('predicted_tags', '')
-        assert len(tags_str.split(',')) == 1
+        assert len(txn.tags) == 1
+
+
+# =============================================================================
+# Predicted postings must balance
+# =============================================================================
+
+
+class TestPredictedPostingsBalance:
+    """A filled leg must carry no units so Beancount interpolates the amount.
+
+    An explicit `0 CHF` leaves the transaction unbalanced, which means every successful
+    prediction produces a file the loader rejects.
+    """
+
+    def test_predicted_leg_has_no_units(self, ledger_multi_payee) -> None:
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(payee='Migros', narration='Groceries')
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        predicted = [p for p in txn.postings if p.account == 'Expenses:Groceries']
+        assert len(predicted) == 1
+        assert predicted[0].units is None
+
+    def test_predicted_txn_loads_without_errors(self, ledger_multi_payee) -> None:
+        from beancount import loader
+        from beancount.parser import printer
+
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(payee='Migros', narration='Groceries')
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+
+        header = (
+            'option "operating_currency" "CHF"\n'
+            '2020-01-01 open Assets:Bank:CHF CHF\n'
+            '2020-01-01 open Expenses:Groceries CHF\n'
+        )
+        _entries, errors, _options = loader.load_string(header + '\n' + printer.format_entry(txn))
+        assert errors == [], [printer.format_error(e) for e in errors]
+
+    def test_importer_leg_is_left_alone(self, ledger_multi_payee) -> None:
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(payee='Migros', narration='Groceries')
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        bank = [p for p in txn.postings if p.account == 'Assets:Bank:CHF']
+        assert len(bank) == 1
+        assert bank[0].units == Amount(D('-100'), 'CHF')
+
+    def test_no_duplicate_posting_when_account_already_present(self, ledger_multi_payee) -> None:
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Migros',
+            narration='Groceries',
+            amounts=['-100', '100'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Groceries'],
+        )
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == ['Assets:Bank:CHF', 'Expenses:Groceries']
+
+    def test_a_split_in_no_settled_proportion_gets_no_prediction(self) -> None:
+        """Beancount accepts only one posting without an amount.
+
+        A health-insurance premium is split across basic and supplementary cover in
+        proportions renegotiated every year.  Filling both in without amounts fails to load
+        with "You may not have more than one auto-posting per currency", and there is no
+        proportion to fill them in *with*, so the legs stay blank for review.
+        """
+        history = [
+            _split_txn(
+                'HealthInsurer',
+                '-541.75',
+                {'Expenses:Insurance:KVG': '431.65', 'Expenses:Insurance:VVG': '110.10'},
+                month,
+            )
+            for month in range(1, 4)
+        ] + [
+            # Next year's premium: same cover, a different division of it.
+            _split_txn(
+                'HealthInsurer',
+                '-598.30',
+                {'Expenses:Insurance:KVG': '502.20', 'Expenses:Insurance:VVG': '96.10'},
+                month,
+            )
+            for month in range(4, 7)
+        ]
+        imported = _make_imported(payee='HealthInsurer', narration='')
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == ['Assets:Bank:CHF']
+
+    def test_a_split_the_ledger_always_makes_the_same_way_is_proposed(self) -> None:
+        """A hotel halved with a partner is halved every time, so the halves can be filled in.
+
+        This is the difference from the premium above: the proportion is a habit, so there is
+        an answer to give.  Without it the predictor knows exactly which accounts are involved
+        and has to stay silent, which is what happened to every Booking.com import.
+        """
+        history = [
+            _split_txn(
+                'Booking.com',
+                amount,
+                {
+                    'Expenses:Travel:Hotel': halved,
+                    'Assets:Owed-to-Me:Partner': halved,
+                },
+                month,
+            )
+            for month, (amount, halved) in enumerate(
+                [
+                    ('-74.45', '37.225'),
+                    ('-149.70', '74.85'),
+                    ('-61.70', '30.85'),
+                    ('-44.50', '22.25'),
+                ],
+                start=1,
+            )
+        ]
+        imported = _make_imported(payee='Booking.com', narration='', amounts=['-412.05'])
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+
+        assert [(p.account, str(p.units)) for p in txn.postings] == [
+            ('Assets:Bank:CHF', '-412.05 CHF'),
+            ('Assets:Owed-to-Me:Partner', '206.025 CHF'),
+            ('Expenses:Travel:Hotel', '206.025 CHF'),
+        ]
+        assert _loads_cleanly(txn)
+
+    def test_an_odd_amount_still_balances_to_the_rappen(self) -> None:
+        """Halving 33.35 leaves a remainder, and the last leg has to absorb it."""
+        history = [
+            _split_txn(
+                'Booking.com',
+                '-100.00',
+                {'Expenses:Travel:Hotel': '50.00', 'Assets:Owed-to-Me:Partner': '50.00'},
+                month,
+            )
+            for month in range(1, 5)
+        ]
+        imported = _make_imported(payee='Booking.com', narration='', amounts=['-33.35'])
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+
+        total = sum(p.units.number for p in txn.postings)
+        assert total == D('0'), f'legs do not balance: {[str(p.units) for p in txn.postings]}'
+        assert _loads_cleanly(txn)
+
+    def test_the_payee_blind_fallback_is_off_by_default(self, ledger_multi_payee) -> None:
+        """An unrecognised payee must reach review with a blank leg, not a plausible guess.
+
+        Rung 5 answers with the account's most frequent counterpart regardless of the
+        transaction, so on a spending account every unknown payee lands on whatever you buy
+        most often.  A wrong account that looks reasonable is harder to catch than a hole.
+        """
+        imported = _make_imported(payee='Totally Unknown Shop', narration='Something')
+        result = RulesPostingsPredictor().hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == ['Assets:Bank:CHF']
+
+    def test_the_payee_blind_fallback_can_be_switched_on(self) -> None:
+        """Still available for a single-purpose account where the guess is always right."""
+        history = [
+            Transaction(
+                new_metadata('ledger.bean', i),
+                datetime.date(2025, 1, 1),
+                '*',
+                f'Shop {i}',
+                'Groceries',
+                frozenset(),
+                frozenset(),
+                [
+                    Posting('Assets:Bank:CHF', Amount(D('-20'), 'CHF'), None, None, None, None),
+                    Posting('Expenses:Groceries', Amount(D('20'), 'CHF'), None, None, None, None),
+                ],
+            )
+            for i in range(12)
+        ]
+        imported = _make_imported(payee='Totally Unknown Shop', narration='Something')
+        result = RulesPostingsPredictor(enable_rule_5=True).hook(imported, history)
+        txn = _imported_txns(result)[0]
+        assert _account_names(txn) == ['Assets:Bank:CHF', 'Expenses:Groceries']
+
+    def test_complete_transaction_is_left_alone(self, ledger_multi_payee) -> None:
+        """A transaction that already has its other leg must not gain a second one.
+
+        Beancount allows only one posting without an amount per currency, so predicting on
+        top of a leg someone else supplied produces a file it refuses to load.
+        """
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Migros',
+            narration='Groceries',
+            amounts=['-100', '100'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Something-Else'],
+        )
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == [
+            'Assets:Bank:CHF',
+            'Expenses:Something-Else',
+        ]
