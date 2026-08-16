@@ -13,7 +13,7 @@ from beancount_hooks.normalizer import extract_keywords, normalize_payee, round_
 from beancount_hooks.rules import RulesPayeePredictor, RulesPostingsPredictor, RulesTagsPredictor
 from beancount_hooks.ruleset import Actions, Match, Rule, Ruleset
 
-__version__ = '0.5.0'
+__version__ = '0.6.0'
 
 __all__ = [
     'Actions',
