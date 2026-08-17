@@ -379,6 +379,49 @@ class TestActions:
         ).apply_to(complete)
         assert postings_of(result) == postings_of(complete)
 
+    def test_post_appends_on_an_unbalanced_bank_plus_fee_transaction(self) -> None:
+        """A bank leg plus a fee leg does not balance; a rule may still fill the residual."""
+        unbalanced = txn()._replace(
+            postings=[
+                Posting(BANK, Amount(D('-100.00'), 'CHF'), None, None, None, None),
+                Posting('Expenses:Fees:Yuh', Amount(D('2.00'), 'CHF'), None, None, None, None),
+            ]
+        )
+        result = Actions(post='Expenses:Food').apply_to(unbalanced)
+        assert postings_of(result) == [
+            (BANK, '-100.00 CHF'),
+            ('Expenses:Fees:Yuh', '2.00 CHF'),
+            ('Expenses:Food', None),
+        ]
+        assert loads_cleanly(result, [BANK, 'Expenses:Fees:Yuh', 'Expenses:Food']) == []
+
+    def test_a_split_is_skipped_on_an_unbalanced_bank_plus_fee_transaction(self) -> None:
+        """Declared fractions assume the whole residual; a fee leg already takes part of it."""
+        unbalanced = txn()._replace(
+            postings=[
+                Posting(BANK, Amount(D('-100.00'), 'CHF'), None, None, None, None),
+                Posting('Expenses:Fees:Yuh', Amount(D('2.00'), 'CHF'), None, None, None, None),
+            ]
+        )
+        result = Actions(split=(('Expenses:A', D('0.5')), ('Expenses:B', D('0.5')))).apply_to(
+            unbalanced
+        )
+        assert postings_of(result) == postings_of(unbalanced)
+
+    def test_a_rename_still_applies_to_an_unbalanced_bank_plus_fee_transaction(self) -> None:
+        unbalanced = txn()._replace(
+            postings=[
+                Posting(BANK, Amount(D('-100.00'), 'CHF'), None, None, None, None),
+                Posting('Expenses:Fees:Yuh', Amount(D('2.00'), 'CHF'), None, None, None, None),
+            ]
+        )
+        result = Actions(payee='Coop AG', post='Expenses:Food', tags=('shopping',)).apply_to(
+            unbalanced
+        )
+        assert result.payee == 'Coop AG'
+        assert result.tags == frozenset({'shopping'})
+        assert postings_of(result)[-1] == ('Expenses:Food', None)
+
     def test_split_gives_the_remainder_to_the_last_account(self) -> None:
         """Thirds of 100 do not divide evenly; the transaction must still balance."""
         result = Actions(

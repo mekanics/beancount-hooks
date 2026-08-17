@@ -17,7 +17,7 @@ from beancount.core.data import Posting
 
 from beancount_hooks.entries import map_transactions
 from beancount_hooks.index import LedgerIndex
-from beancount_hooks.utils import allocate, get_amount_and_sign, source_units
+from beancount_hooks.utils import allocate, balancing_units, get_amount_and_sign
 
 if TYPE_CHECKING:
     from beancount.core.data import Transaction
@@ -40,8 +40,9 @@ def _make_cache_key(entries: list) -> int:
 class RulesPostingsPredictor:
     """Predict missing posting accounts using a decision ladder.
 
-    The importer already provides one leg (e.g. ``Assets:Bank:CHF``).
-    This predictor attempts to fill the *other* leg(s).
+    The importer supplies the legs it knows — the bank leg, and any fee it names
+    outright.  This predictor fills what is left when the transaction does not yet
+    balance (see :func:`~beancount_hooks.utils.balancing_units`).
 
     Rungs 1 to 4 all key on something specific to the transaction.  Rung 5 does not — see
     ``enable_rule_5``, which is off by default.
@@ -50,11 +51,11 @@ class RulesPostingsPredictor:
     general, so a subscription that moved between cards is answered by the card it is on now.
 
     Where a rung answers with several legs, the amount has to be divided between them, since
-    Beancount interpolates only one posting per currency.  That is offered only where *this
-    payee* divides it the same way every time, within ``split_tolerance`` — a purchase halved
-    with a partner.  The same three accounts on a different payee are a different habit.
-    Proportions that move, such as an insurance premium renegotiated each year, leave the
-    legs blank instead.
+    Beancount interpolates only one posting per currency.  That is offered only where the
+    entry still carries a single account (the importer's) *and* *this payee* divides it the
+    same way every time, within ``split_tolerance`` — a purchase halved with a partner.  The
+    same three accounts on a different payee are a different habit.  Proportions that move,
+    such as an insurance premium renegotiated each year, leave the legs blank instead.
     """
 
     def __init__(
@@ -127,33 +128,48 @@ class RulesPostingsPredictor:
         entry: Transaction,
         importer_account: str | None,
         index: LedgerIndex,
-    ) -> list[str] | None:
+    ) -> list[PredictedLeg] | None:
         """Apply decision ladder.  First match wins.
 
-        Returns a list of account strings for the *other* leg(s), or None.
+        Returns ``(account, fraction)`` legs for what is still missing, or None.
         """
-        # Nothing to fill: the importer or a rule already supplied the other leg.  Adding
-        # another one would give Beancount a second posting with no amount, which it
-        # rejects with "You may not have more than one auto-posting per currency".
-        if len([p for p in entry.postings if p.account]) > 1:
+        # Nothing to fill: the transaction already balances, already has an auto-posting,
+        # or the residual spans more than one currency.
+        if balancing_units(entry) is None:
             return None
 
         payee = entry.payee or ''
         narration = entry.narration or ''
+        present = {p.account for p in entry.postings if p.account}
+        # A multi-leg split is only safe when the entry still carries exactly the importer
+        # account: historical fractions include every other leg, and allocating them over
+        # an entry that already has a fee posting would not balance.
+        single_leg = present == {importer_account} if importer_account else len(present) == 1
 
-        # Helper: only keep accounts that are NOT the importer account.
-        def _filter_importer(accounts: list[str] | None) -> list[PredictedLeg] | None:
+        # Keep accounts that are not already posted on the entry.  History that includes a
+        # fee account against an entry that already carries that fee must resolve to one
+        # leftover account, not a two-way split.
+        def _filter_present(accounts: list[str] | None) -> list[PredictedLeg] | None:
             if accounts is None:
                 return None
             if not (importer_account and importer_account in accounts):
                 # Predicted set doesn't include importer account → mismatch, skip.
                 return None
-            filtered = [a for a in accounts if a != importer_account]
+            filtered = [a for a in accounts if a not in present]
             if not filtered:
                 return None
             if len(filtered) == 1:
-                # One leg, no amount: Beancount works it out from the leg the importer gave.
+                # One leg, no amount: Beancount works it out from the residual.
                 return [(filtered[0], None)]
+
+            if not single_leg:
+                logger.debug(
+                    'RulesPostingsPredictor: %s still needs %s but the entry already has '
+                    'more than the importer account; leaving the leg blank.',
+                    payee or narration or '<unknown>',
+                    filtered,
+                )
+                return None
 
             # More than one leg to fill, and Beancount accepts only one posting without an
             # amount — so the only way to offer these is to say how much goes where.  That is
@@ -174,21 +190,21 @@ class RulesPostingsPredictor:
         # that changed cards is answered by the card it is on now rather than the one it left.
 
         # Rule 1: Exact payee match.
-        result = _filter_importer(
+        result = _filter_present(
             index.get_accounts_by_payee(payee, self.min_occurrence, importer_account)
         )
         if result:
             return result
 
         # Rule 2: Normalized payee match.
-        result = _filter_importer(
+        result = _filter_present(
             index.get_accounts_by_normalized_payee(payee, self.min_occurrence, importer_account)
         )
         if result:
             return result
 
         # Rule 3: Narration keyword match.
-        result = _filter_importer(
+        result = _filter_present(
             index.get_accounts_by_keyword(narration, self.min_occurrence, importer_account)
         )
         if result:
@@ -205,7 +221,7 @@ class RulesPostingsPredictor:
                 sign = s
                 break
         if amount is not None and sign is not None:
-            result = _filter_importer(
+            result = _filter_present(
                 index.get_accounts_by_amount(
                     payee,
                     amount,
@@ -225,7 +241,7 @@ class RulesPostingsPredictor:
         # is visible at review; a plausible wrong one is not.
         if self.enable_rule_5 and importer_account:
             counterpart = index.get_counterpart(importer_account, min_count=10)
-            if counterpart:
+            if counterpart and counterpart not in present:
                 return [(counterpart, None)]
 
         return None
@@ -250,11 +266,11 @@ class RulesPostingsPredictor:
         """Return a new Transaction with predicted postings added.
 
         A single leg carries no units, so Beancount interpolates the amount and currency from
-        what the importer supplied — an explicit amount there would either unbalance the
-        transaction or hardcode a currency a multi-currency import does not use.
+        the residual — an explicit amount there would either unbalance the transaction or
+        hardcode a currency a multi-currency import does not use.
 
         Several legs cannot all be left to interpolation, so they come with amounts worked out
-        from the fractions the ledger has settled on.
+        from the fractions the ledger has settled on, applied to :func:`balancing_units`.
         """
         existing_accounts = {p.account for p in entry.postings if p.account}
         pending = [(a, f) for a, f in predicted if a not in existing_accounts]
@@ -272,11 +288,11 @@ class RulesPostingsPredictor:
                 ]
             )
 
-        units = source_units(entry)
-        if units is None:
+        total = balancing_units(entry)
+        if total is None:
             return entry
         shares = [(account, fraction) for account, fraction in pending if fraction is not None]
-        return entry._replace(postings=[*entry.postings, *allocate(units, shares)])
+        return entry._replace(postings=[*entry.postings, *allocate(total, shares)])
 
 
 class RulesPayeePredictor:

@@ -715,7 +715,7 @@ class TestPredictedPostingsBalance:
         assert _account_names(txn) == ['Assets:Bank:CHF', 'Expenses:Groceries']
 
     def test_complete_transaction_is_left_alone(self, ledger_multi_payee) -> None:
-        """A transaction that already has its other leg must not gain a second one.
+        """A transaction that already balances must not gain another leg.
 
         Beancount allows only one posting without an amount per currency, so predicting on
         top of a leg someone else supplied produces a file it refuses to load.
@@ -733,3 +733,132 @@ class TestPredictedPostingsBalance:
             'Assets:Bank:CHF',
             'Expenses:Something-Else',
         ]
+
+
+class TestResidualCompleteness:
+    """Completeness is the residual, not the account count."""
+
+    def test_bank_leg_plus_fee_gains_a_third_posting(self, ledger_multi_payee) -> None:
+        """A Yuh-shaped foreign purchase already names the fee; the residual still needs filling."""
+        predictor = RulesPostingsPredictor(min_occurrence=3)
+        imported = _make_imported(
+            payee='Migros',
+            narration='Groceries',
+            amounts=['-100', '2'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Fees:Yuh'],
+        )
+        result = predictor.hook(imported, ledger_multi_payee)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == [
+            'Assets:Bank:CHF',
+            'Expenses:Fees:Yuh',
+            'Expenses:Groceries',
+        ]
+        assert txn.postings[2].units is None
+        assert _loads_cleanly(txn)
+
+    def test_fee_in_history_resolves_to_one_auto_posting(self) -> None:
+        """History that includes the fee account must not propose a split of what is left."""
+        history = [
+            Transaction(
+                new_metadata('ledger.bean', month),
+                datetime.date(2025, month, 1),
+                '*',
+                'Restaurant X',
+                '',
+                frozenset(),
+                frozenset(),
+                [
+                    Posting('Assets:Bank:CHF', Amount(D('-50'), 'CHF'), None, None, None, None),
+                    Posting('Expenses:Fees:Yuh', Amount(D('2'), 'CHF'), None, None, None, None),
+                    Posting('Expenses:Restaurant', Amount(D('48'), 'CHF'), None, None, None, None),
+                ],
+            )
+            for month in range(1, 5)
+        ]
+        imported = _make_imported(
+            payee='Restaurant X',
+            narration='',
+            amounts=['-50', '2'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Fees:Yuh'],
+        )
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == [
+            'Assets:Bank:CHF',
+            'Expenses:Fees:Yuh',
+            'Expenses:Restaurant',
+        ]
+        assert txn.postings[2].units is None
+        assert _loads_cleanly(txn)
+
+    def test_unbalanced_two_account_entry_declines_a_multi_leg_split(self) -> None:
+        """Historical fractions include a leg that is already present; allocating them would not balance."""
+        history = [
+            _split_txn(
+                'Shared Meal',
+                '-100',
+                {
+                    'Expenses:Fees:Yuh': '2',
+                    'Expenses:Restaurant': '49',
+                    'Assets:Owed-to-Me:Friend': '49',
+                },
+                month,
+            )
+            for month in range(1, 5)
+        ]
+        imported = _make_imported(
+            payee='Shared Meal',
+            narration='',
+            amounts=['-100', '2'],
+            accounts=['Assets:Bank:CHF', 'Expenses:Fees:Yuh'],
+        )
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+        assert [p.account for p in txn.postings] == [
+            'Assets:Bank:CHF',
+            'Expenses:Fees:Yuh',
+        ]
+
+    def test_multi_currency_residual_is_declined(self, ledger_multi_payee) -> None:
+        """One posting cannot resolve a residual that spans two currencies."""
+        meta = new_metadata('import.csv', 1)
+        txn = Transaction(
+            meta,
+            datetime.date(2024, 6, 1),
+            '*',
+            'Migros',
+            'Groceries',
+            frozenset(),
+            frozenset(),
+            [
+                Posting('Assets:Bank:CHF', Amount(D('-100'), 'CHF'), None, None, None, None),
+                Posting('Assets:Bank:USD', Amount(D('-10'), 'USD'), None, None, None, None),
+            ],
+        )
+        imported = [('import.csv', [txn], 'Assets:Bank:CHF', None)]
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, ledger_multi_payee)
+        out = _imported_txns(result)[0]
+        assert [p.account for p in out.postings] == ['Assets:Bank:CHF', 'Assets:Bank:USD']
+
+    def test_existing_auto_posting_is_declined(self, ledger_multi_payee) -> None:
+        """A second auto-posting is an error; leave the entry alone."""
+        meta = new_metadata('import.csv', 1)
+        txn = Transaction(
+            meta,
+            datetime.date(2024, 6, 1),
+            '*',
+            'Migros',
+            'Groceries',
+            frozenset(),
+            frozenset(),
+            [
+                Posting('Assets:Bank:CHF', Amount(D('-100'), 'CHF'), None, None, None, None),
+                Posting('Expenses:Something', None, None, None, None, None),
+            ],
+        )
+        imported = [('import.csv', [txn], 'Assets:Bank:CHF', None)]
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, ledger_multi_payee)
+        out = _imported_txns(result)[0]
+        assert [p.account for p in out.postings] == ['Assets:Bank:CHF', 'Expenses:Something']
+        assert out.postings[1].units is None
