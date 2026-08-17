@@ -252,6 +252,7 @@ _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     (r'^aldi\s+.*', 'aldi'),
     (r'^lidl\s+.*', 'lidl'),
     (r'^denner\s+.*', 'denner'),
+    (r'^spar\s+.*', 'spar'),
     (r'^manor\s+.*', 'manor'),
     (r'^jumbo\s+.*', 'jumbo'),
     (r'^bauhaus\s+.*', 'bauhaus'),

@@ -52,6 +52,11 @@ class TestNormalizePayee:
         assert normalize_payee('Coop City') == 'coop'
         assert normalize_payee('Coop') == 'coop'
 
+    def test_unify_spar_variants(self) -> None:
+        assert normalize_payee('SPAR Zürich') == 'spar'
+        assert normalize_payee('Spar Express') == 'spar'
+        assert normalize_payee('SPAR') == 'spar'
+
     def test_unify_sbb_variants(self) -> None:
         assert normalize_payee('SBB CFF FFS') == 'sbb'
         assert normalize_payee('sbb') == 'sbb'
