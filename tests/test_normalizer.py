@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from beancount_hooks.normalizer import extract_keywords, normalize_payee, round_to_bin
 
 
@@ -37,8 +39,13 @@ class TestNormalizePayee:
         assert normalize_payee('Migros Zürich') == 'migros'
         assert normalize_payee('Migros Basel') == 'migros'
         assert normalize_payee('MIGROS BERN') == 'migros'
-        assert normalize_payee('Migrolino') == 'migros'
-        assert normalize_payee('Migrol') == 'migros'
+
+    def test_migrol_and_migrolino_are_not_the_supermarket(self) -> None:
+        assert normalize_payee('Migrolino') == 'migrolino'
+        assert normalize_payee('Migrol') == 'migrol'
+        assert normalize_payee('Migrol Tanken (80.00)') == 'migrol'
+        assert normalize_payee('Migrolino Benzin') == 'migrolino'
+        assert normalize_payee('Migrolino Zürich HB') == 'migrolino'
 
     def test_unify_coop_variants(self) -> None:
         assert normalize_payee('Coop Pronto') == 'coop'
@@ -98,10 +105,25 @@ class TestExtractKeywords:
         assert result.count('migros') == 1
 
     def test_punctuation_split(self) -> None:
-        result = extract_keywords('Payment: Migros, Zurich.')
-        assert 'payment' in result
+        result = extract_keywords('Groceries: Migros, Zurich.')
+        assert 'groceries' in result
         assert 'migros' in result
         assert 'zurich' in result
+
+    @pytest.mark.parametrize(
+        'word',
+        ['Twint', 'LSV', 'Einzug', 'Dauerauftrag', 'Zahlung', 'Payment', 'Kreditkarte'],
+    )
+    def test_payment_mechanics_are_not_keywords(self, word) -> None:
+        """How money moved says nothing about what it bought.
+
+        "Twint" appears on a 6.50 bus ticket and on a 1334.40 transfer between friends, so
+        indexing it teaches the predictor to book every Twint payment as public transport.
+        """
+        assert extract_keywords(word) == []
+
+    def test_a_real_word_survives_alongside_mechanics(self) -> None:
+        assert extract_keywords('Twint Zahlung Coiffeur') == ['coiffeur']
 
     def test_german_stopwords(self) -> None:
         result = extract_keywords('Miete für die Wohnung')

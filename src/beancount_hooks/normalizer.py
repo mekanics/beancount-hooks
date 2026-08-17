@@ -170,6 +170,47 @@ _STOPWORDS: Final[frozenset[str]] = frozenset(
     }
 )
 
+# Words naming *how* money moved rather than *what* it bought.  Kept separate from the
+# grammatical stopwords above because the reason for excluding them is different, and the
+# test for adding one is specific: if the word tells you nothing about the category, it is
+# payment mechanics.  Left in, they are actively harmful — "Twint" appears on a bus ticket
+# and on a four-figure transfer between friends, so a keyword index learns to book every
+# Twint payment as public transport.
+_PAYMENT_MECHANICS: Final[frozenset[str]] = frozenset(
+    {
+        # Swiss payment rails
+        'twint',
+        'lsv',
+        'sepa',
+        'einzug',
+        'dauerauftrag',
+        'ebanking',
+        'banking',
+        'esr',
+        # Instruments
+        'kreditkarte',
+        'debitkarte',
+        'karte',
+        'card',
+        'visa',
+        'mastercard',
+        'maestro',
+        # Movement, in three languages
+        'zahlung',
+        'zahlungen',
+        'payment',
+        'paiement',
+        'überweisung',
+        'transfer',
+        'virement',
+        'gutschrift',
+        'belastung',
+        'rechnung',
+        'invoice',
+        'facture',
+    }
+)
+
 # Known suffixes to strip from payees for normalization.
 _LEGAL_SUFFIXES: Final[list[str]] = [
     r'\s+ag\b',
@@ -195,8 +236,6 @@ _LEGAL_SUFFIXES: Final[list[str]] = [
 _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     # Migros variants
     (r'^migros\s+.*', 'migros'),
-    (r'^migrolino\b', 'migros'),
-    (r'^migrol\b', 'migros'),
     # Coop variants
     (r'^coop\s+.*', 'coop'),
     (r'^coop\b', 'coop'),
@@ -217,6 +256,8 @@ _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     (r'^jumbo\s+.*', 'jumbo'),
     (r'^bauhaus\s+.*', 'bauhaus'),
     (r'^landi\s+.*', 'landi'),
+    (r'^migrolino\b', 'migrolino'),
+    (r'^migrol\b', 'migrol'),
     (r'^shell\s+.*', 'shell'),
     (r'^bp\s+.*', 'bp'),
     (r'^avia\s+.*', 'avia'),
@@ -282,8 +323,9 @@ def normalize_payee(payee: str | None) -> str:
 def extract_keywords(narration: str | None, min_length: int = 3) -> list[str]:
     """Extract meaningful keywords from narration.
 
-    Splits on whitespace and punctuation, filters stopwords, and drops
-    tokens shorter than *min_length* unless they are known abbreviations.
+    Splits on whitespace and punctuation, filters grammatical stopwords and payment
+    mechanics, and drops tokens shorter than *min_length* unless they are known
+    abbreviations.
 
     Returns a deduplicated list in insertion order.
     """
@@ -301,7 +343,7 @@ def extract_keywords(narration: str | None, min_length: int = 3) -> list[str]:
         token = token.strip('-')
         if not token:
             continue
-        if token in _STOPWORDS:
+        if token in _STOPWORDS or token in _PAYMENT_MECHANICS:
             continue
         if len(token) < min_length and token not in known_abbrs:
             continue
