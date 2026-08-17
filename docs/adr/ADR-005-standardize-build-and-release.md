@@ -40,7 +40,8 @@ Locked forks:
 
 - **Build backend**: `uv_build` in both. Version lives in `pyproject.toml`;
   `__version__` is derived via `importlib.metadata`.
-- **Python floor**: `requires-python = ">=3.11"`; CI matrix 3.11–3.14.
+- **Python floor**: `requires-python = ">=3.11"`; CI matrix 3.11–3.13.
+  3.14 is omitted until Beancount ships a `cp314` wheel (3.2.0 stops at 3.13).
 - **Hardening**: SHA-pinned actions, `permissions: {}` at workflow level,
   zizmor as a CI gate, Renovate with a release-age cooldown.
 - **Release**: tag push only. The first step checks that the tag equals `v`
