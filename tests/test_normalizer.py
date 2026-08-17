@@ -64,6 +64,12 @@ class TestNormalizePayee:
         assert normalize_payee('Amazon.de') == 'amazon'
         assert normalize_payee('Google Ireland') == 'google'
 
+    def test_unify_7_eleven_and_uniqlo_variants(self) -> None:
+        assert normalize_payee('7-Eleven Zürich') == '7-eleven'
+        assert normalize_payee('7-ELEVEN HB') == '7-eleven'
+        assert normalize_payee('Uniqlo Zürich HB') == 'uniqlo'
+        assert normalize_payee('UNIQLO STORE') == 'uniqlo'
+
     def test_combined_strip(self) -> None:
         assert normalize_payee('Migros AG 8001') == 'migros'
         assert normalize_payee('Coop GmbH (Basel) 4051') == 'coop'
