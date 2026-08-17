@@ -84,7 +84,10 @@ There is no database, no service, and no ML library.
   `existing_entries` list. Cache is dropped when that list object changes.
 
 `RulesPostingsPredictor` rungs, first match wins, each filtered to history
-that includes the [importer account](./glossary.md):
+that includes the [importer account](./glossary.md). The ladder runs only
+when `balancing_units` is non-`None` — the transaction does not yet balance,
+has no auto-posting, and the residual is a single currency
+([ADR-006](./adr/ADR-006-complete-means-balanced.md)):
 
 | Rung | Key                         | Default |
 |------|-----------------------------|---------|
@@ -98,8 +101,9 @@ Rung 5 is off because on an everyday-spending account it books every unknown
 payee as whatever you buy most. A blank leg is visible; a plausible wrong one
 is not.
 
-Several other legs are filled only when `LedgerIndex.get_split_shares` finds a
-stable division for that payee. Otherwise the predictor stays silent
+Several other legs are filled only when the entry still carries a single
+account *and* `LedgerIndex.get_split_shares` finds a stable division for that
+payee. Otherwise the predictor stays silent
 ([ADR-004](./adr/ADR-004-stable-splits-only.md)).
 
 ### `LedgerIndex` (`index.py`)
@@ -132,7 +136,8 @@ stable division for that payee. Otherwise the predictor stays silent
 
 ### `utils` (`utils.py`)
 
-- **Responsibility**: `allocate` (last share absorbs the rounding remainder),
+- **Responsibility**: `balancing_units` (residual of a transaction as one
+  amount, or `None`), `allocate` (last share absorbs the rounding remainder),
   `source_units`, `get_amount_and_sign`.
 - **Interfaces**: Called by `Actions` and the postings predictor.
 
@@ -145,9 +150,10 @@ stable division for that payee. Otherwise the predictor stays silent
    account is in scope, the first matching rule applies or drops it.
 3. Predictors build or reuse a `LedgerIndex` from `existing_entries`.
 4. `RulesPayeePredictor` writes `entry.payee` only when it is empty.
-5. `RulesPostingsPredictor` writes other legs only when the transaction still
-   has a single account. One predicted leg is left amount-less for Beancount
-   to interpolate; several legs are allocated from settled fractions.
+5. `RulesPostingsPredictor` writes other legs only when `balancing_units` is
+   non-`None`. One predicted leg is left amount-less for Beancount to
+   interpolate; several legs are allocated from settled fractions, and only
+   when the entry still carries a single account.
 6. `RulesTagsPredictor` unions predicted tags onto `entry.tags`.
 7. The same `imported_entries` list object is returned, mutated in place, so
    the next hook sees the previous hook's work.

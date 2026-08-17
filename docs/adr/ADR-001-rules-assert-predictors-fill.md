@@ -59,8 +59,10 @@ package documents that order and will not grow a combined hook that blurs it.
 
 ## Implementation Notes
 
-- Predictors check "already set" before writing: more than one posting
-  account, a non-empty payee, tags are unioned not replaced.
+- Predictors check "already set" before writing: a non-empty residual is
+  required before postings are filled (see
+  [ADR-006](./ADR-006-complete-means-balanced.md)); a non-empty payee is left
+  alone; tags are unioned not replaced.
 - `Ruleset.hook` ignores `existing_entries`.
 - Rung 5 of the postings ladder (most common counterpart, ignoring the
   payee) stays off by default — it is the "plausible wrong account" option.

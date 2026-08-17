@@ -22,7 +22,7 @@ from beancount.core.amount import Amount
 from beancount.core.data import Posting
 
 from beancount_hooks.entries import map_transactions
-from beancount_hooks.utils import allocate, source_units
+from beancount_hooks.utils import allocate, balancing_units, source_units
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -289,22 +289,21 @@ class Actions:
         if not self.post and not self.split:
             return None
 
-        present = {p.account for p in txn.postings if p.account}
-        if len(present) > 1:
-            # The importer already supplied the other side.  Some importers hand over a
-            # finished transaction (a credit card that assigns its own category and splits
-            # the amount with a partner) while others hand over a single leg — and they can
-            # share an account, so which one this is cannot be known from the account name.
-            # Appending here would either unbalance a transaction that already balanced or
-            # add a second posting with no amount, which Beancount refuses to load.  The
-            # rule's other actions still apply: a rename is welcome either way.
+        # A transaction that already balances, or that already carries an auto-posting,
+        # has nothing left for a rule to fill.  Completeness is the residual, not the
+        # account count: a bank leg plus a fee leg is two accounts and still incomplete.
+        if balancing_units(txn) is None:
             logger.debug(
-                'Actions: %s already has %d accounts, adding no postings.',
+                'Actions: %s already balances or has an auto-posting, adding no postings.',
                 txn.narration or txn.payee or '<unknown>',
-                len(present),
             )
             return None
 
+        present = {p.account for p in txn.postings if p.account}
+        # Declared fractions assume the whole residual is theirs.  That is only true when
+        # the entry still carries a single account — judged on the incoming transaction,
+        # before this rule's own post specs are added.
+        allow_split = len(present) == 1
         postings = list(txn.postings)
 
         for spec in self._post_specs:
@@ -314,14 +313,15 @@ class Actions:
             present.add(account)
             postings.append(Posting(account, units, None, None, None, None))
 
-        postings.extend(self._split_postings(txn, present))
+        if allow_split:
+            postings.extend(self._split_postings(txn, present))
         return postings
 
     def _split_postings(self, txn: Transaction, present: set[str]) -> list[Posting]:
         if not self.split:
             return []
-        units = source_units(txn)
-        if units is None:
+        total = balancing_units(txn)
+        if total is None:
             return []
 
         pending = [(a, f) for a, f in self.split if a not in present]
@@ -329,7 +329,7 @@ class Actions:
             return []
 
         present.update(account for account, _fraction in pending)
-        return allocate(units, pending)
+        return allocate(total, pending)
 
 
 @dataclass(frozen=True)
