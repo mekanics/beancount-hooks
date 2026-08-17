@@ -52,6 +52,11 @@ class TestNormalizePayee:
         assert normalize_payee('Coop City') == 'coop'
         assert normalize_payee('Coop') == 'coop'
 
+    def test_unify_spar_variants(self) -> None:
+        assert normalize_payee('SPAR Zürich') == 'spar'
+        assert normalize_payee('Spar Express') == 'spar'
+        assert normalize_payee('SPAR') == 'spar'
+
     def test_unify_sbb_variants(self) -> None:
         assert normalize_payee('SBB CFF FFS') == 'sbb'
         assert normalize_payee('sbb') == 'sbb'
@@ -63,6 +68,12 @@ class TestNormalizePayee:
         assert normalize_payee('Apple Inc.') == 'apple'
         assert normalize_payee('Amazon.de') == 'amazon'
         assert normalize_payee('Google Ireland') == 'google'
+
+    def test_unify_7_eleven_and_uniqlo_variants(self) -> None:
+        assert normalize_payee('7-Eleven Zürich') == '7-eleven'
+        assert normalize_payee('7-ELEVEN HB') == '7-eleven'
+        assert normalize_payee('Uniqlo Zürich HB') == 'uniqlo'
+        assert normalize_payee('UNIQLO STORE') == 'uniqlo'
 
     def test_combined_strip(self) -> None:
         assert normalize_payee('Migros AG 8001') == 'migros'

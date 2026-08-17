@@ -13,7 +13,7 @@ RulesTagsPredictor.hook      # add tags the payee usually carries
 ```
 
 That order is the contract. Reverse it and a guess lands before the rule
-that should have won. See [ADR-001](docs/adr/ADR-001-rules-assert-predictors-fill.md).
+that should have won.
 
 ## Install
 
@@ -82,8 +82,7 @@ ingest runs.
 
 `Match` amounts are absolute; direction is `sign='debit'` or `'credit'`.
 `amount=D("10.00")` without a sign matches both the charge and the refund —
-add `sign` if you mean only one. See
-[ADR-003](docs/adr/ADR-003-absolute-amounts-and-sign.md).
+add `sign` if you mean only one.
 
 `Ruleset.shadowed()` returns `(earlier, unreachable)` pairs for rules that
 can never fire. `Ruleset.explain(txn, account)` lists every match in
@@ -95,17 +94,16 @@ Fava sends the beangulp 4-tuple only to hooks whose annotations contain the
 literal text `Importer`. Every hook in this package does. If you wrap
 `hook`, keep that word in the signature or Fava will call you with
 `(filename, entries)`, the importer account will be missing, and
-`map_transactions` will raise. See
-[ADR-002](docs/adr/ADR-002-fava-importer-annotation.md).
+`map_transactions` will raise.
 
 ## Documentation
 
-| Doc | What it is |
-|-----|------------|
-| [docs/PRD.md](docs/PRD.md) | Scope, users, non-goals |
-| [docs/SAD.md](docs/SAD.md) | Components, data flow, the posting ladder |
-| [docs/glossary.md](docs/glossary.md) | Shared vocabulary |
-| [docs/adr/](docs/adr/) | Binding decisions |
+| Doc                                  | What it is                                |
+| ------------------------------------ | ----------------------------------------- |
+| [docs/PRD.md](docs/PRD.md)           | Scope, users, non-goals                   |
+| [docs/SAD.md](docs/SAD.md)           | Components, data flow, the posting ladder |
+| [docs/glossary.md](docs/glossary.md) | Shared vocabulary                         |
+| [docs/adr/](docs/adr/)               | Binding decisions                         |
 
 ## Develop
 

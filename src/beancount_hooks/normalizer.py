@@ -252,6 +252,7 @@ _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     (r'^aldi\s+.*', 'aldi'),
     (r'^lidl\s+.*', 'lidl'),
     (r'^denner\s+.*', 'denner'),
+    (r'^spar\s+.*', 'spar'),
     (r'^manor\s+.*', 'manor'),
     (r'^jumbo\s+.*', 'jumbo'),
     (r'^bauhaus\s+.*', 'bauhaus'),
@@ -275,6 +276,9 @@ _UNIFY_VARIANTS: Final[list[tuple[str, str]]] = [
     (r'^spotify\s+.*', 'spotify'),
     (r'^netflix\s+.*', 'netflix'),
     (r'^dropbox\s+.*', 'dropbox'),
+    # Convenience / retail
+    (r'^7-eleven\s+.*', '7-eleven'),
+    (r'^uniqlo\s+.*', 'uniqlo'),
 ]
 
 
