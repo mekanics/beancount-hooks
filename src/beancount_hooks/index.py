@@ -34,9 +34,13 @@ class LedgerIndex:
         self.amount_map: dict[tuple[str, float, int], Counter[frozenset[str]]] = {}
         self.cooccur_map: dict[str, Counter[str]] = {}
         self.tag_map: dict[str, Counter[str]] = {}
-        # For each (account set, which leg the money came from), the fraction every other leg
-        # took, once per transaction.  Only genuine splits are recorded — see get_split_shares.
-        self.split_map: dict[tuple[frozenset[str], str], list[dict[str, Decimal]]] = {}
+        # For each (account set, which leg the money came from, payee), the fraction every
+        # other leg took, once per transaction.  The payee is load-bearing: the same three
+        # accounts can divide 50/50 for groceries and 95/5 for a mixed cigarette run, and a
+        # table that ignores the name treats that as one unstable habit.  Each split is
+        # stored under the exact payee and under normalize_payee, so a store spelling with
+        # no history of its own still sees the brand.  See get_split_shares.
+        self.split_map: dict[tuple[frozenset[str], str, str], list[dict[str, Decimal]]] = {}
         # Denominator for tag_map.  tag_map only counts transactions that carry a tag, so on
         # its own it cannot say whether a tag is a property of the payee or a leftover from a
         # handful of them — see get_tags.
@@ -144,7 +148,9 @@ class LedgerIndex:
         """Note what fraction each leg took, from the point of view of every other leg.
 
         Which leg is the source is not knowable here — it depends on which importer asks
-        later — so the shares are recorded once per candidate source.
+        later — so the shares are recorded once per candidate source.  The payee is stored
+        twice when the exact name and the normalized name differ, so a later lookup can
+        ask about this spelling or about the brand.
         """
         totals: dict[str, Decimal] = {}
         for posting in txn.postings:
@@ -156,24 +162,37 @@ class LedgerIndex:
             # have interpolated amounts, but an entry straight from a parser may not.
             return
 
+        payee = txn.payee or ''
+        names = [payee]
+        norm = normalize_payee(payee)
+        if norm and norm != payee:
+            names.append(norm)
+
         for source, total in totals.items():
             if not total:
                 continue
-            self.split_map.setdefault((accounts, source), []).append(
-                {account: value / -total for account, value in totals.items() if account != source}
-            )
+            shares = {
+                account: value / -total for account, value in totals.items() if account != source
+            }
+            for name in names:
+                self.split_map.setdefault((accounts, source, name), []).append(shares)
 
     def get_split_shares(
         self,
         accounts: frozenset[str],
         source_account: str,
+        payee: str,
         min_count: int = 3,
         tolerance: Decimal = Decimal('0.01'),
     ) -> list[tuple[str, Decimal]] | None:
-        """How *accounts* divide an amount arriving from *source_account*, or None.
+        """How *payee* divides *accounts* arriving from *source_account*, or None.
 
         Returns ``(account, fraction)`` pairs sorted by account name, so the caller allocates
         in a stable order and the last one absorbs the rounding remainder.
+
+        Exact payee first, then ``normalize_payee``.  Exact history that is plentiful but
+        unstable — cigarettes and a snack booked to the same three accounts — is an answer
+        of None, not a reason to try the brand and hope the mixture looks better.
 
         Answers only where the division is a habit rather than a coincidence: the same set of
         legs, at least *min_count* times, with every fraction within *tolerance* of its mean.
@@ -181,20 +200,35 @@ class LedgerIndex:
         ways in proportions that are renegotiated yearly does not, and gets None so the legs
         stay blank for review.
         """
-        observations = self.split_map.get((accounts, source_account))
-        if observations is None or len(observations) < min_count:
-            return None
+        exact = self.split_map.get((accounts, source_account, payee))
+        if exact is not None and len(exact) >= min_count:
+            return self._stable_shares(exact, tolerance)
 
+        norm = normalize_payee(payee)
+        if not norm or norm == payee:
+            return None
+        named = self.split_map.get((accounts, source_account, norm))
+        if named is None or len(named) < min_count:
+            return None
+        return self._stable_shares(named, tolerance)
+
+    @staticmethod
+    def _stable_shares(
+        observations: list[dict[str, Decimal]],
+        tolerance: Decimal,
+    ) -> list[tuple[str, Decimal]] | None:
+        """Mean fractions if every observation agrees within *tolerance*, else None."""
         others = set(observations[0])
         if any(set(observation) != others for observation in observations):
             return None
 
         shares: list[tuple[str, Decimal]] = []
+        count = Decimal(len(observations))
         for account in sorted(others):
             values = [observation[account] for observation in observations]
             if max(values) - min(values) > tolerance:
                 return None
-            shares.append((account, sum(values) / len(values)))
+            shares.append((account, sum(values) / count))
         return shares
 
     def get_accounts_by_payee(

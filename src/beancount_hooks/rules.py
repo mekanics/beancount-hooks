@@ -50,10 +50,11 @@ class RulesPostingsPredictor:
     general, so a subscription that moved between cards is answered by the card it is on now.
 
     Where a rung answers with several legs, the amount has to be divided between them, since
-    Beancount interpolates only one posting per currency.  That is offered only where the
-    ledger divides it the same way every time, within ``split_tolerance`` — a purchase halved
-    with a partner.  Proportions that move, such as an insurance premium renegotiated each
-    year, leave the legs blank instead.
+    Beancount interpolates only one posting per currency.  That is offered only where *this
+    payee* divides it the same way every time, within ``split_tolerance`` — a purchase halved
+    with a partner.  The same three accounts on a different payee are a different habit.
+    Proportions that move, such as an insurance premium renegotiated each year, leave the
+    legs blank instead.
     """
 
     def __init__(
@@ -158,7 +159,7 @@ class RulesPostingsPredictor:
             # amount — so the only way to offer these is to say how much goes where.  That is
             # answerable when the division is a habit: a purchase halved with a partner is
             # always halved.  When it is not, the legs stay blank for review.
-            shares = self.index_split_shares(accounts, importer_account, index)
+            shares = self.index_split_shares(accounts, importer_account, index, payee)
             if shares is None:
                 logger.debug(
                     'RulesPostingsPredictor: %s splits across %s in no settled proportion, '
@@ -234,11 +235,13 @@ class RulesPostingsPredictor:
         accounts: list[str],
         importer_account: str,
         index: LedgerIndex,
+        payee: str,
     ) -> list[tuple[str, Decimal]] | None:
-        """The settled proportions for *accounts*, or None if there are none."""
+        """The settled proportions for *payee* on *accounts*, or None if there are none."""
         return index.get_split_shares(
             frozenset(accounts),
             importer_account,
+            payee,
             self.min_occurrence,
             self.split_tolerance,
         )

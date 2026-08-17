@@ -575,6 +575,91 @@ class TestPredictedPostingsBalance:
         ]
         assert _loads_cleanly(txn)
 
+    def test_a_neighbours_unstable_split_does_not_veto_a_stable_payee(self) -> None:
+        """Fractions are a habit of the payee, not of three account names.
+
+        Denner books cigarettes to the partner account and a snack to groceries, so the
+        same set {Bank, Groceries, Partner} divides ~95/5.  Migros always halves.  A
+        table keyed only by the set sees a 50-point range and stays silent for both.
+        """
+        history = [
+            _split_txn(
+                'Migros',
+                '-40.00',
+                {'Expenses:Groceries': '20.00', 'Assets:Owed-to-Me:Partner': '20.00'},
+                month,
+            )
+            for month in range(1, 5)
+        ] + [
+            _split_txn(
+                'Denner',
+                '-80.00',
+                {'Expenses:Groceries': '4.00', 'Assets:Owed-to-Me:Partner': '76.00'},
+                month,
+            )
+            for month in range(5, 9)
+        ]
+        imported = _make_imported(payee='Migros', narration='', amounts=['-23.90'])
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+
+        assert [(p.account, str(p.units)) for p in txn.postings] == [
+            ('Assets:Bank:CHF', '-23.90 CHF'),
+            ('Assets:Owed-to-Me:Partner', '11.95 CHF'),
+            ('Expenses:Groceries', '11.95 CHF'),
+        ]
+        assert _loads_cleanly(txn)
+
+    def test_a_normalized_payee_still_gets_the_settled_split(self) -> None:
+        """A store spelling with no history of its own still uses the brand's halves."""
+        history = [
+            _split_txn(
+                'Migros Kreuzplatz',
+                '-30.00',
+                {'Expenses:Groceries': '15.00', 'Assets:Owed-to-Me:Partner': '15.00'},
+                1,
+            ),
+            _split_txn(
+                'Migros Kreuzplatz',
+                '-12.00',
+                {'Expenses:Groceries': '6.00', 'Assets:Owed-to-Me:Partner': '6.00'},
+                2,
+            ),
+            _split_txn(
+                'Migros',
+                '-40.00',
+                {'Expenses:Groceries': '20.00', 'Assets:Owed-to-Me:Partner': '20.00'},
+                3,
+            ),
+            _split_txn(
+                'Migros',
+                '-8.00',
+                {'Expenses:Groceries': '4.00', 'Assets:Owed-to-Me:Partner': '4.00'},
+                4,
+            ),
+            # Same three accounts, a different payee, a different division — must not
+            # be in the brand's bucket once fractions are keyed by payee.
+            *(
+                _split_txn(
+                    'Denner',
+                    '-80.00',
+                    {'Expenses:Groceries': '4.00', 'Assets:Owed-to-Me:Partner': '76.00'},
+                    month,
+                )
+                for month in range(5, 9)
+            ),
+        ]
+        imported = _make_imported(payee='Migros Basel', narration='', amounts=['-23.90'])
+        result = RulesPostingsPredictor(min_occurrence=3).hook(imported, history)
+        txn = _imported_txns(result)[0]
+
+        assert [(p.account, str(p.units)) for p in txn.postings] == [
+            ('Assets:Bank:CHF', '-23.90 CHF'),
+            ('Assets:Owed-to-Me:Partner', '11.95 CHF'),
+            ('Expenses:Groceries', '11.95 CHF'),
+        ]
+        assert _loads_cleanly(txn)
+
     def test_an_odd_amount_still_balances_to_the_rappen(self) -> None:
         """Halving 33.35 leaves a remainder, and the last leg has to absorb it."""
         history = [
